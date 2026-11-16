@@ -1,0 +1,11 @@
+node_modules/
+dist/
+coverage/
+.env
+.env.*
+!.env.example
+__pycache__/
+.venv/
+*.py[cod]
+backend/private-uploads/
+.DS_Store
