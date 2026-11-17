@@ -56,25 +56,33 @@ export default function PatientCaseWizard({ language = 'en', patientId, token, d
   const startVoiceInput = () => {
     const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!Recognition) {
-      setVoiceError(language === 'hi' ? 'इस ब्राउज़र में आवाज़ से लिखना उपलब्ध नहीं है। कृपया टाइप करें।' : 'Voice input is not available in this browser. Please type your answer.');
+      setVoiceError(language === 'hi' ? 'इस ब्राउज़र में वॉइस इनपुट उपलब्ध नहीं है। Chrome या Edge में खोलें, या जवाब टाइप करें।' : 'Voice input is not supported by this browser. Open this page in Chrome or Edge, or type your answer.');
       return;
     }
     setVoiceError('');
     const recognition = new Recognition();
     recognition.lang = language === 'hi' ? 'hi-IN' : 'en-IN';
-    recognition.interimResults = false;
+    recognition.interimResults = true;
+    recognition.continuous = false;
     recognition.maxAlternatives = 1;
     recognition.onstart = () => setListening(true);
     recognition.onend = () => setListening(false);
-    recognition.onerror = () => {
+    recognition.onerror = (event) => {
       setListening(false);
-      setVoiceError(language === 'hi' ? 'आवाज़ पहचानी नहीं जा सकी। कृपया फिर से कोशिश करें या टाइप करें।' : 'We could not recognize that speech. Try again or type your answer.');
+      setVoiceError(event.error === 'not-allowed' || event.error === 'service-not-allowed'
+        ? (language === 'hi' ? 'माइक्रोफ़ोन की अनुमति दें और पेज को HTTPS पर खोलें।' : 'Allow microphone access and open this page over HTTPS.')
+        : event.error === 'no-speech'
+          ? (language === 'hi' ? 'आवाज़ नहीं मिली। बोलकर फिर कोशिश करें।' : 'No speech was detected. Speak and try again.')
+          : (language === 'hi' ? 'आवाज़ पहचानी नहीं जा सकी। फिर कोशिश करें या जवाब टाइप करें।' : 'Speech could not be recognized. Try again or type your answer.'));
     };
     recognition.onresult = (event) => {
-      const transcript = event.results?.[0]?.[0]?.transcript || '';
-      setAnswers((current) => ({ ...current, [question.field]: transcript }));
+      const transcript = Array.from(event.results || []).map((result) => result[0]?.transcript || '').join(' ').trim();
+      if (transcript) setAnswers((current) => ({ ...current, [question.field]: transcript }));
     };
-    recognition.start();
+    try { recognition.start(); } catch (_error) {
+      setListening(false);
+      setVoiceError(language === 'hi' ? 'माइक्रोफ़ोन शुरू नहीं हो सका। अनुमति जाँचें या जवाब टाइप करें।' : 'Could not start the microphone. Check its permission or type your answer.');
+    }
   };
 
   const readQuestion = () => {

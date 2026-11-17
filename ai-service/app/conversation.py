@@ -52,6 +52,16 @@ class RuleBasedDemoEngine(ConversationEngine):
 
         if field == 'chiefComplaint' and not follow_up_answer:
             trimmed = answer.strip().casefold().rstrip(' .!?')
+            if any(term in trimmed for term in ('headache', 'head pain', 'migraine', 'सिरदर्द', 'सिर दर्द')):
+                return ConversationResult(
+                    mode='demo',
+                    reply='I can ask one brief question to better understand your headache.' if language == 'en' else 'सिरदर्द को बेहतर समझने के लिए मैं एक छोटा सवाल पूछूँगा।',
+                    follow_up_question=(
+                        'When did the headache begin, and has it been constant or come and go?'
+                        if language == 'en'
+                        else 'सिरदर्द कब शुरू हुआ, और क्या यह लगातार रहता है या आता-जाता है?'
+                    ),
+                )
             if trimmed in VAGUE_COMPLAINTS or len(trimmed) < 12:
                 return ConversationResult(
                     mode='demo',

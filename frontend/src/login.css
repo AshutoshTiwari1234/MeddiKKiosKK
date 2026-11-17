@@ -22,6 +22,11 @@
 .login-select:focus{border-color:#51a89c;box-shadow:0 0 0 3px #168c8312}
 .login-success{margin:0 0 16px;border:1px solid #d2e9df;border-radius:7px;background:#f3fbf6;color:#287455;padding:10px 12px;font-size:10px;line-height:1.55}
 .account-request-form .form-label:not(:first-child){margin-top:15px}
+.account-request-form{padding:18px;border:1px solid #e9eef1;border-radius:11px;background:#fbfcfd}
+.login-form-panel{overflow-y:auto}
+.login-form-panel:has(.account-request-form){align-items:stretch}
+.login-form-panel:has(.account-request-form) .login-form-wrap{margin:auto;width:min(100%,460px)}
+.account-request-form .login-submit{margin-top:22px}
 .login-kicker{display:block;color:#168b81;font-size:9px;font-weight:800;letter-spacing:1.4px;margin-bottom:12px}
 .login-form-wrap h2{font:700 29px 'Manrope',sans-serif;letter-spacing:-.8px;color:#263d53;margin:0 0 7px}
 .login-subtitle{font-size:12px;line-height:1.6;color:#8291a0;margin:0 0 28px}
@@ -52,3 +57,4 @@
 .login-footer span{color:#c5cdd3}
 @media(max-width:1000px) and (min-width:761px){.login-screen{grid-template-columns:minmax(0,.82fr) minmax(390px,1fr)}.login-brand-panel{padding:34px}.login-brand-content h1{font-size:40px}.login-form-panel{padding-left:38px;padding-right:38px}}
 @media(max-width:760px){.login-screen{grid-template-columns:1fr}.login-brand-panel{display:none}.login-form-panel{min-height:100vh;padding:30px 22px 76px}.login-form-wrap{width:min(100%,420px);margin:auto}.login-mobile-brand{display:flex;align-items:center;gap:9px;margin:0 0 48px;color:#183e54;font:800 17px 'Manrope',sans-serif}.login-mobile-brand .brand-mark{width:32px;height:32px}.login-footer{left:22px;right:22px;bottom:19px}}
+@media(max-width:760px){.login-form-panel:has(.account-request-form){padding-bottom:76px}.account-request-form{padding:15px}}
