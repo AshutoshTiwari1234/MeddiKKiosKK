@@ -59,6 +59,18 @@ The first administrator is created through the interactive `npm run create-admin
   - `hourly` and `daily` check-in counts.
 - Waiting time is measured from check-in to the first time the patient is called. `POST /api/patients/:patientId/call` accepts `{ "status": "waiting" | "called" | "in_consultation" | "done" }` (default `called`) and records `calledAt`, `consultationStartedAt` and `consultationEndedAt`. Patients without a call timestamp are left out of the averages.
 
+## Clinic sessions (OPD schedules)
+
+A clinic session is one doctor's OPD shift in one cabin on one day. Times are local 24-hour `HH:MM`. Shift presets: `morning` 09:00–13:00, `afternoon` 14:00–17:00, `evening` 17:00–20:00; `custom` needs `startTime` and `endTime` (a preset may also be given explicit times).
+
+- `GET /api/sessions?date=YYYY-MM-DD` or `?from=&to=` (default today, up to 92 days), with optional `doctorId`, `department`, `cabin`, `status` and `includeCancelled=true`. Available to all staff.
+- `GET /api/sessions/cabins?date=` returns cabin allocation for a day: each allocated cabin with its sessions and, for today, the session occupying it right now.
+- `GET /api/sessions/:sessionId` returns one session.
+- `POST /api/sessions` (administrator or doctor) accepts `{ doctorId, date, shift, startTime?, endTime?, cabin, department?, slotMinutes? (default 15), maxPatients?, notes? }`. Doctors can only schedule themselves and may omit `doctorId`. Administrators must name an active doctor. Past dates are rejected.
+- `PATCH /api/sessions/:sessionId` (administrator or the assigned doctor) changes date, shift, times, cabin, department, slot length, capacity or notes. Completed and cancelled sessions cannot be edited.
+- `PATCH /api/sessions/:sessionId/status` accepts `{ "status": "active" | "completed" | "cancelled", "reason"? }`. Allowed changes: scheduled → active or cancelled, active → completed or cancelled.
+- Creating or moving a session returns `409` if the doctor already has an overlapping session, or if the cabin is already allocated at that time (cabin names are compared ignoring case and extra spaces). Back-to-back sessions are allowed, and cancelled sessions free their slot.
+
 ## Emergency alerts
 
 - `GET /api/alerts` returns open and acknowledged human-assessment alerts to authenticated staff.

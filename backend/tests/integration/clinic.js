@@ -146,3 +146,96 @@ test('OPD analytics reports totals, waiting time and department statistics', asy
   const unauthenticated = await fetch(`${apiUrl}/api/analytics/opd`);
   assert.equal(unauthenticated.status, 401);
 });
+
+function futureDate(daysAhead = 1) {
+  const date = new Date();
+  date.setDate(date.getDate() + daysAhead);
+  return formatLocalDate(date);
+}
+
+test('clinic sessions manage doctor shifts and cabin allocation without overlaps', async () => {
+  const date = futureDate(1);
+  const doctorId = String(staff.doctor._id);
+  const doctor2Id = String(staff.doctor2._id);
+
+  const receptionistCreate = await call('receptionist', 'POST', '/sessions', { doctorId, date, shift: 'morning', cabin: 'Cabin 1' });
+  assert.equal(receptionistCreate.status, 403);
+
+  const morning = await call('administrator', 'POST', '/sessions', { doctorId, date, shift: 'morning', cabin: 'Cabin 1' });
+  assert.equal(morning.status, 201);
+  assert.equal(morning.body.session.startTime, '09:00');
+  assert.equal(morning.body.session.endTime, '13:00');
+  assert.equal(morning.body.session.department, 'General Medicine');
+  assert.equal(morning.body.session.doctor.name, 'Dr. Meera Rao');
+
+  // Same doctor, overlapping time in another cabin.
+  const doctorClash = await call('administrator', 'POST', '/sessions', { doctorId, date, shift: 'custom', startTime: '12:00', endTime: '14:00', cabin: 'Cabin 2' });
+  assert.equal(doctorClash.status, 409);
+  assert.match(doctorClash.body.error.message, /already has a session/);
+
+  // Different doctor, same cabin and overlapping time (cabin name differs only in case/spacing).
+  const cabinClash = await call('administrator', 'POST', '/sessions', { doctorId: doctor2Id, date, shift: 'custom', startTime: '10:00', endTime: '11:00', cabin: '  cabin   1 ' });
+  assert.equal(cabinClash.status, 409);
+  assert.match(cabinClash.body.error.message, /Cabin 1 is already allocated/);
+
+  // Back-to-back sessions in the same cabin are fine.
+  const afternoon = await call('doctor2', 'POST', '/sessions', { date, shift: 'custom', startTime: '13:00', endTime: '16:00', cabin: 'Cabin 1', slotMinutes: 20 });
+  assert.equal(afternoon.status, 201);
+  assert.equal(afternoon.body.session.department, 'Cardiology');
+
+  const doctorForOther = await call('doctor2', 'POST', '/sessions', { doctorId, date, shift: 'evening', cabin: 'Cabin 4' });
+  assert.equal(doctorForOther.status, 403);
+
+  const invalidCustom = await call('administrator', 'POST', '/sessions', { doctorId, date, shift: 'custom', cabin: 'Cabin 5' });
+  assert.equal(invalidCustom.status, 400);
+  const backwards = await call('administrator', 'POST', '/sessions', { doctorId, date, shift: 'custom', startTime: '18:00', endTime: '17:00', cabin: 'Cabin 5' });
+  assert.equal(backwards.status, 400);
+  const past = await call('administrator', 'POST', '/sessions', { doctorId, date: '2020-01-01', shift: 'morning', cabin: 'Cabin 5' });
+  assert.equal(past.status, 400);
+  const receptionistAsDoctor = await call('administrator', 'POST', '/sessions', { doctorId: String(staff.receptionist._id), date, shift: 'morning', cabin: 'Cabin 6' });
+  assert.equal(receptionistAsDoctor.status, 400);
+
+  const list = await call('receptionist', 'GET', `/sessions?date=${date}`);
+  assert.equal(list.status, 200);
+  assert.deepEqual(list.body.sessions.map((session) => session.startTime), ['09:00', '13:00']);
+  const byDoctor = await call('receptionist', 'GET', `/sessions?from=${date}&to=${date}&doctorId=${doctor2Id}`);
+  assert.equal(byDoctor.body.sessions.length, 1);
+
+  const cabins = await call('receptionist', 'GET', `/sessions/cabins?date=${date}`);
+  assert.equal(cabins.status, 200);
+  assert.equal(cabins.body.cabins.length, 1);
+  assert.equal(cabins.body.cabins[0].cabin, 'Cabin 1');
+  assert.equal(cabins.body.cabins[0].sessions.length, 2);
+
+  // Moving the morning session into a free cabin; another doctor cannot edit it.
+  const sessionId = morning.body.session._id;
+  const otherDoctorEdit = await call('doctor2', 'PATCH', `/sessions/${sessionId}`, { cabin: 'Cabin 9' });
+  assert.equal(otherDoctorEdit.status, 403);
+  const moved = await call('doctor', 'PATCH', `/sessions/${sessionId}`, { cabin: 'Cabin 3', shift: 'custom', endTime: '12:30' });
+  assert.equal(moved.status, 200);
+  assert.equal(moved.body.session.cabin, 'Cabin 3');
+  assert.equal(moved.body.session.startTime, '09:00');
+  assert.equal(moved.body.session.endTime, '12:30');
+  const movedIntoClash = await call('administrator', 'PATCH', `/sessions/${sessionId}`, { cabin: 'Cabin 1', endTime: '13:30' });
+  assert.equal(movedIntoClash.status, 409);
+
+  // Status lifecycle.
+  const complete = await call('doctor', 'PATCH', `/sessions/${sessionId}/status`, { status: 'completed' });
+  assert.equal(complete.status, 409);
+  const start = await call('doctor', 'PATCH', `/sessions/${sessionId}/status`, { status: 'active' });
+  assert.equal(start.status, 200);
+  assert.ok(start.body.session.startedAt);
+  const cancel = await call('administrator', 'PATCH', `/sessions/${afternoon.body.session._id}/status`, { status: 'cancelled', reason: 'Doctor on leave' });
+  assert.equal(cancel.status, 200);
+  const editCancelled = await call('administrator', 'PATCH', `/sessions/${afternoon.body.session._id}`, { notes: 'x' });
+  assert.equal(editCancelled.status, 409);
+
+  // A cancelled session frees its cabin and is hidden from the default list.
+  const reuseCabin = await call('administrator', 'POST', '/sessions', { doctorId: doctor2Id, date, shift: 'custom', startTime: '13:00', endTime: '15:00', cabin: 'Cabin 1' });
+  assert.equal(reuseCabin.status, 201);
+  const withCancelled = await call('receptionist', 'GET', `/sessions?date=${date}&includeCancelled=true`);
+  assert.equal(withCancelled.body.sessions.length, 3);
+
+  const missing = await call('receptionist', 'GET', '/sessions/507f1f77bcf86cd799439011');
+  assert.equal(missing.status, 404);
+});
