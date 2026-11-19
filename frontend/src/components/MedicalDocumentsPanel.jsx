@@ -1,6 +1,7 @@
 import { Download, FileText, ShieldCheck } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { api } from '../services/api.js';
+import { useToast } from './ToastProvider.jsx';
 
 const categoryLabels = {
   prescription: 'Prescription',
@@ -10,10 +11,9 @@ const categoryLabels = {
 };
 
 export default function MedicalDocumentsPanel({ patient, onUpdated }) {
+  const toast = useToast();
   const [drafts, setDrafts] = useState({});
   const [busyId, setBusyId] = useState('');
-  const [notice, setNotice] = useState('');
-  const [error, setError] = useState('');
   const documents = patient.documents || [];
 
   useEffect(() => {
@@ -25,7 +25,6 @@ export default function MedicalDocumentsPanel({ patient, onUpdated }) {
 
   const downloadOriginal = async (document) => {
     setBusyId(document._id);
-    setError('');
     try {
       const { data } = await api.get(`/patients/${encodeURIComponent(patient.patientId)}/documents/${document._id}/file`, { responseType: 'blob' });
       const url = URL.createObjectURL(data);
@@ -35,7 +34,7 @@ export default function MedicalDocumentsPanel({ patient, onUpdated }) {
       link.click();
       URL.revokeObjectURL(url);
     } catch (requestError) {
-      setError(requestError.response?.data?.error?.message || 'Could not download the original document.');
+      toast.error(requestError.response?.data?.error?.message || 'Could not download the original document.');
     } finally {
       setBusyId('');
     }
@@ -43,8 +42,6 @@ export default function MedicalDocumentsPanel({ patient, onUpdated }) {
 
   const saveReview = async (document, reviewStatus) => {
     setBusyId(document._id);
-    setError('');
-    setNotice('');
     try {
       const draft = drafts[document._id] || { text: '', notes: '' };
       await api.patch(`/patients/${encodeURIComponent(patient.patientId)}/documents/${document._id}/review`, {
@@ -52,10 +49,10 @@ export default function MedicalDocumentsPanel({ patient, onUpdated }) {
         reviewNotes: draft.notes,
         reviewStatus,
       });
-      setNotice('Document review saved.');
+      toast.success('Document review saved.');
       await onUpdated();
     } catch (requestError) {
-      setError(requestError.response?.data?.error?.message || 'Could not save the document review.');
+      toast.error(requestError.response?.data?.error?.message || 'Could not save the document review.');
     } finally {
       setBusyId('');
     }
@@ -63,8 +60,6 @@ export default function MedicalDocumentsPanel({ patient, onUpdated }) {
 
   return <section className="panel medical-documents-panel">
     <div className="panel-heading"><div><h2><FileText size={16} /> Previous medical documents</h2><p>Original uploads are retained. OCR text is a draft and must be checked against the source.</p></div><span className="document-count">{documents.length} {documents.length === 1 ? 'document' : 'documents'}</span></div>
-    {notice && <div className="review-notice success" role="status">{notice}</div>}
-    {error && <div className="admin-alert error" role="alert">{error}</div>}
     {!documents.length ? <div className="admin-empty document-empty"><FileText size={20} /><b>No documents uploaded</b><span>Documents appear here after a patient consents to document processing and uploads a file.</span></div> : <div className="medical-document-list">{documents.map((document) => {
       const draft = drafts[document._id] || { text: '', notes: '' };
       return <article className="medical-document-card" key={document._id}>

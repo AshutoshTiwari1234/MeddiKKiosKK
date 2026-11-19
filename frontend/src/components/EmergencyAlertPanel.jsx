@@ -3,8 +3,10 @@ import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../services/api.js';
 import './emergency-alert.css';
+import { useToast } from './ToastProvider.jsx';
 
 export default function EmergencyAlertPanel() {
+  const toast = useToast();
   const [alerts, setAlerts] = useState([]);
   const [error, setError] = useState('');
   const [busyId, setBusyId] = useState('');
@@ -27,12 +29,11 @@ export default function EmergencyAlertPanel() {
 
   const update = async (alert, status) => {
     setBusyId(alert._id);
-    setError('');
     try {
       await api.patch(`/alerts/${encodeURIComponent(alert._id)}`, { status });
       await refresh();
     } catch (requestError) {
-      setError(requestError.response?.data?.error?.message || 'The alert could not be updated.');
+      toast.error(requestError.response?.data?.error?.message || 'The alert could not be updated.');
     } finally {
       setBusyId('');
     }

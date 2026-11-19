@@ -1,6 +1,7 @@
-import { Activity, AlertCircle, Check, Edit3, Heart, Save, Scale, Thermometer, Wind } from 'lucide-react';
+import { Activity, Edit3, Heart, Save, Scale, Thermometer, Wind } from 'lucide-react';
 import { useState } from 'react';
 import { api } from '../services/api.js';
+import { useToast } from './ToastProvider.jsx';
 
 export function getBmiCategory(bmi) {
   if (!bmi || Number.isNaN(bmi)) return null;
@@ -22,10 +23,9 @@ export function getBpCategory(systolic, diastolic) {
 }
 
 export default function TriageVitalsPanel({ patient, onUpdated }) {
+  const toast = useToast();
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
 
   const currentVitals = patient?.vitals || {};
   const [form, setForm] = useState({
@@ -51,8 +51,6 @@ export default function TriageVitalsPanel({ patient, onUpdated }) {
   const handleSave = async (e) => {
     e.preventDefault();
     setSaving(true);
-    setError('');
-    setSuccess('');
     try {
       const payload = {
         bloodPressure: {
@@ -67,11 +65,11 @@ export default function TriageVitalsPanel({ patient, onUpdated }) {
       };
 
       await api.patch(`/patients/${encodeURIComponent(patient.patientId)}/vitals`, payload);
-      setSuccess('Vitals updated successfully.');
+      toast.success('Vitals updated successfully.');
       setEditing(false);
       onUpdated?.();
     } catch (err) {
-      setError(err.response?.data?.error?.message || 'Failed to save vitals.');
+      toast.error(err.response?.data?.error?.message || 'Failed to save vitals.');
     } finally {
       setSaving(false);
     }
@@ -97,8 +95,6 @@ export default function TriageVitalsPanel({ patient, onUpdated }) {
         )}
       </div>
 
-      {error && <div className="admin-alert error" role="alert"><AlertCircle size={15} /> {error}</div>}
-      {success && <div className="admin-alert success" role="status"><Check size={15} /> {success}</div>}
 
       {!editing ? (
         <div className="vitals-display-grid">

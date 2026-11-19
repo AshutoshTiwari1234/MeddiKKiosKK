@@ -1,4 +1,4 @@
-import { ArrowLeft, Bell, CalendarDays, FileHeart, ShieldCheck, Sparkles, UserRound, Volume2 } from 'lucide-react';
+import { ArrowLeft, CalendarDays, FileHeart, ShieldCheck, Sparkles, UserRound, Volume2 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { useSelector } from 'react-redux';
 import { Link, useParams } from 'react-router-dom';
@@ -11,6 +11,7 @@ import PrescriptionBuilderPanel from '../components/PrescriptionBuilderPanel.jsx
 import TriageVitalsPanel from '../components/TriageVitalsPanel.jsx';
 import VitalsTrendChart from '../components/VitalsTrendChart.jsx';
 import { api } from '../services/api.js';
+import { useToast } from '../components/ToastProvider.jsx';
 
 const historyFields = [
   ['Chief complaint', 'chiefComplaint'], ['Onset', 'onset'], ['Duration', 'duration'], ['Location', 'location'],
@@ -29,6 +30,7 @@ function formatDate(value) {
 export default function PatientRecordPage() {
   const { patientId } = useParams();
   const currentUser = useSelector((state) => state.auth.user);
+  const toast = useToast();
   const [patient, setPatient] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -46,17 +48,15 @@ export default function PatientRecordPage() {
   }, [patientId]);
 
   const [calling, setCalling] = useState(false);
-  const [callNotice, setCallNotice] = useState('');
 
   const callPatient = async () => {
     setCalling(true);
-    setCallNotice('');
     try {
       await api.post(`/patients/${encodeURIComponent(patientId)}/call`, { status: 'called' });
-      setCallNotice(`Called token ${patient.queueToken || patient.patientId} to ${patient.roomNumber || 'Consultation Room'}! Announced on waiting hall TV display.`);
+      toast.success(`Called token ${patient.queueToken || patient.patientId} to ${patient.roomNumber || 'Consultation Room'}! Announced on waiting hall TV display.`);
       loadPatient();
-    } catch (_e) {
-      setCallNotice('Call request submitted.');
+    } catch (requestError) {
+      toast.error(requestError.response?.data?.error?.message || 'Could not call this patient. Please try again.');
     } finally {
       setCalling(false);
     }
@@ -92,8 +92,6 @@ export default function PatientRecordPage() {
             </div>
           </div>
         </div>
-
-        {callNotice && <div className="admin-alert success" role="status"><Bell size={15} /> {callNotice}</div>}
 
         <section className="panel record-summary"><h2><UserRound size={16} /> Patient information</h2><div className="record-info-grid"><div><small>Date of birth</small><b>{formatDate(patient.dateOfBirth)}</b></div><div><small>Gender</small><b>{patient.gender?.replaceAll('_', ' ') || 'Not provided'}</b></div><div><small>Phone</small><b>{patient.phone || 'Not provided'}</b></div><div><small>Email</small><b>{patient.email || 'Not provided'}</b></div><div><small>Department</small><b>{patient.department || 'General Medicine'}</b></div><div><small>Queue Token</small><b className="text-teal font-bold">{patient.queueToken || 'OPD-101'}</b></div><div><small>Assigned Room</small><b>{patient.roomNumber || 'Room 1'}</b></div><div><small>Preferred language</small><b>{patient.preferredLanguage === 'hi' ? 'Hindi' : patient.preferredLanguage === 'en' ? 'English' : 'Other'}</b></div><div><small>Emergency contact</small><b>{patient.emergencyContact?.name ? `${patient.emergencyContact.name}${patient.emergencyContact.phone ? ` · ${patient.emergencyContact.phone}` : ''}` : 'Not provided'}</b></div>{currentUser?.role !== 'receptionist' && <div><small>ABHA ID</small><b>{patient.abhaId || 'Not provided'}</b></div>}<div><small>Check-in date</small><b>{formatDate(patient.createdAt)}</b></div></div><div className="consent-summary"><ShieldCheck size={15} /><span>Case-taking consent recorded {patient.consent?.recordedAt ? formatDate(patient.consent.recordedAt) : 'not available'}.</span></div></section>
 
