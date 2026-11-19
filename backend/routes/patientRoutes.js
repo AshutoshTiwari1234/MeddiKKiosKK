@@ -1,6 +1,6 @@
 const express = require('express');
 const { rateLimit } = require('express-rate-limit');
-const { downloadPatientDocument, getPatientDocument, reviewPatientDocument, uploadPatientDocument } = require('../controllers/documentController');
+const { categorizePatientDocument, downloadPatientDocument, getPatientDocument, reviewPatientDocument, uploadPatientDocument, verifyPatientDocument } = require('../controllers/documentController');
 const { generateClinicalSummary, updateClinicalSummary } = require('../controllers/summaryController');
 const { getConversationReply, getPatient, getPatientAuditLogs, listPatients, registerPatient, saveIntakeProgress, searchPatients, updateAyurvedaAssessment, updateClinicalReview, updateIntakeConsent, verifyAbhaHandler, verifyPatientAbha } = require('../controllers/patientController');
 const { checkInteractionsHandler, getPrescription, getPrescriptionHistory, updatePrescription } = require('../controllers/prescriptionController');
@@ -11,7 +11,7 @@ const { uploadDocument } = require('../middleware/documentUpload');
 const requireDatabase = require('../middleware/requireDatabase');
 const requireIntakeToken = require('../middleware/requireIntakeToken');
 const validate = require('../middleware/validate');
-const { abhaVerificationSchema, ayurvedaAssessmentSchema, caseHistoryPatchSchema, clinicalReviewSchema, clinicalSummarySchema, consentUpdateSchema, conversationSchema, documentReviewSchema, interactionCheckSchema, patientSearchSchema, prescriptionInputSchema, registrationSchema } = require('../schemas/patientSchemas');
+const { abhaVerificationSchema, ayurvedaAssessmentSchema, caseHistoryPatchSchema, clinicalReviewSchema, clinicalSummarySchema, consentUpdateSchema, conversationSchema, documentCategoryUpdateSchema, documentReviewSchema, documentVerificationSchema, interactionCheckSchema, patientSearchSchema, prescriptionInputSchema, registrationSchema } = require('../schemas/patientSchemas');
 
 const router = express.Router();
 const registrationLimiter = rateLimit({ windowMs: 60 * 60 * 1000, limit: 20, standardHeaders: 'draft-8', legacyHeaders: false });
@@ -41,6 +41,8 @@ router.patch('/:patientId/summary', requireRole('administrator', 'doctor'), vali
 router.get('/:patientId/documents/:documentId/file', requireRole('administrator', 'doctor'), downloadPatientDocument);
 router.get('/:patientId/documents/:documentId', requireRole('administrator', 'doctor'), getPatientDocument);
 router.patch('/:patientId/documents/:documentId/review', requireRole('administrator', 'doctor'), validate(documentReviewSchema), reviewPatientDocument);
+router.patch('/:patientId/documents/:documentId/verify', requireRole('administrator', 'doctor'), validate(documentVerificationSchema), verifyPatientDocument);
+router.patch('/:patientId/documents/:documentId/category', requireRole('administrator', 'doctor'), validate(documentCategoryUpdateSchema), categorizePatientDocument);
 router.patch('/:patientId/clinical-review', requireRole('administrator', 'doctor'), validate(clinicalReviewSchema), updateClinicalReview);
 router.patch('/:patientId/ayurveda', requireRole('administrator', 'doctor'), validate(ayurvedaAssessmentSchema), updateAyurvedaAssessment);
 

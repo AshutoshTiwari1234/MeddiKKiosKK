@@ -90,10 +90,37 @@ const consentUpdateSchema = z.object({
   aiAssistance: z.boolean().optional(),
 }).strict().refine((value) => Object.keys(value).length > 0, 'Choose at least one consent setting to update.');
 
+const documentCategoryEnum = z.enum([
+  'prescription',
+  'lab_report',
+  'radiology_report',
+  'discharge_summary',
+  'diagnostic_report',
+  'clinical_notes',
+  'immunization_record',
+  'ayush_prescription',
+  'other',
+]);
+
+const documentVerificationSchema = z.object({
+  verificationStatus: z.enum(['unverified', 'pending_verification', 'verified', 'rejected', 'inconclusive']),
+  category: documentCategoryEnum.optional(),
+  verificationNotes: z.string().trim().max(2000).default(''),
+  verificationConfidence: z.enum(['high', 'medium', 'low', 'unspecified']).default('unspecified'),
+  verifiedData: z.record(z.string(), z.any()).optional().nullable(),
+}).strict();
+
+const documentCategoryUpdateSchema = z.object({
+  category: documentCategoryEnum,
+}).strict();
+
 const documentReviewSchema = z.object({
-  reviewedText: z.string().trim().max(20000),
+  reviewedText: z.string().trim().max(20000).optional(),
   reviewNotes: z.string().trim().max(2000).default(''),
-  reviewStatus: z.enum(['pending', 'reviewed']),
+  reviewStatus: z.enum(['pending', 'reviewed']).default('reviewed'),
+  verificationStatus: z.enum(['unverified', 'pending_verification', 'verified', 'rejected', 'inconclusive']).optional(),
+  category: documentCategoryEnum.optional(),
+  verificationNotes: z.string().trim().max(2000).optional(),
 }).strict();
 
 const clinicalSummarySchema = z.object({
@@ -168,7 +195,10 @@ module.exports = {
   clinicalSummarySchema,
   consentUpdateSchema,
   conversationSchema,
+  documentCategoryEnum,
+  documentCategoryUpdateSchema,
   documentReviewSchema,
+  documentVerificationSchema,
   interactionCheckSchema,
   medicationInputSchema,
   patientSearchSchema,
