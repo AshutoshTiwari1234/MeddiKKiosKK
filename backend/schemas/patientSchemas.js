@@ -12,6 +12,7 @@ const registrationSchema = z.object({
   phone: optionalPhone,
   email: z.union([z.literal(''), z.string().trim().email().max(254)]).default(''),
   preferredLanguage: z.enum(['en', 'hi', 'other']).default('en'),
+  department: z.string().trim().max(100).optional().default('General Medicine'),
   emergencyContact: z.object({
     name: z.string().trim().max(100).optional().default(''),
     relationship: z.string().trim().max(50).optional().default(''),
@@ -127,4 +128,48 @@ const ayurvedaAssessmentSchema = z.object({
   nidana: z.string().trim().max(3000),
 }).strict();
 
-module.exports = { ayurvedaAssessmentSchema, caseHistoryPatchSchema, clinicalReviewSchema, clinicalSummarySchema, consentUpdateSchema, conversationSchema, documentReviewSchema, patientSearchSchema, registrationSchema };
+const vitalsInputSchema = z.object({
+  bloodPressure: z.object({
+    systolic: z.number().int().min(40).max(300).nullable().optional(),
+    diastolic: z.number().int().min(30).max(200).nullable().optional(),
+  }).optional(),
+  pulseRate: z.number().int().min(20).max(250).nullable().optional(),
+  spo2: z.number().int().min(50).max(100).nullable().optional(),
+  temperature: z.number().min(80).max(115).nullable().optional(),
+  weight: z.number().min(1).max(500).nullable().optional(),
+  height: z.number().min(20).max(300).nullable().optional(),
+}).strict();
+
+const medicationInputSchema = z.object({
+  name: z.string().trim().min(1).max(150),
+  dosage: z.string().trim().max(100).optional().default(''),
+  form: z.string().trim().max(50).optional().default('Tablet'),
+  frequency: z.string().trim().max(50).optional().default('1-0-1'),
+  duration: z.string().trim().max(50).optional().default('5 days'),
+  instructions: z.string().trim().max(200).optional().default('After food'),
+}).strict();
+
+const prescriptionInputSchema = z.object({
+  medications: z.array(medicationInputSchema).optional().default([]),
+  investigations: z.array(z.string().trim().max(200)).optional().default([]),
+  ayushAdvice: z.object({
+    pathya: z.string().trim().max(2000).optional().default(''),
+    apathya: z.string().trim().max(2000).optional().default(''),
+  }).optional().default({}),
+  generalAdvice: z.string().trim().max(3000).optional().default(''),
+  followUpDate: z.union([z.literal(''), z.iso.date()]).nullable().optional(),
+}).strict();
+
+module.exports = {
+  ayurvedaAssessmentSchema,
+  caseHistoryPatchSchema,
+  clinicalReviewSchema,
+  clinicalSummarySchema,
+  consentUpdateSchema,
+  conversationSchema,
+  documentReviewSchema,
+  patientSearchSchema,
+  prescriptionInputSchema,
+  registrationSchema,
+  vitalsInputSchema,
+};

@@ -5,6 +5,8 @@
 .voice-button:disabled{opacity:.65;cursor:wait}
 .voice-read{background:#fff;color:#697d8e}
 .voice-actions>span{flex-basis:100%;font-size:8px;color:#91a0aa;line-height:1.5}
+.voice-actions>.voice-error{padding:8px 10px;border:1px solid #f0d7d3;border-radius:7px;background:#fff6f4;color:#a64d45;font-size:9px}
+.voice-actions>.voice-notice{padding:8px 10px;border:1px solid #d2e9df;border-radius:7px;background:#f3fbf6;color:#287455;font-size:9px}
 .urgent-reminder.urgent-notice{background:#fff1ef;border-color:#efc8c1;color:#9f3931;font-size:10px;font-weight:700;padding:12px}
 .patient-document-upload{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:10px 12px;margin:15px 0 4px;padding:12px 13px;border:1px solid #e4edeb;border-radius:9px;background:#f9fcfb}
 .document-upload-copy{display:flex;align-items:center;gap:9px;color:#278c7c}.document-upload-copy>div{display:grid;gap:3px}.document-upload-copy b{color:#496476;font-size:9px}.document-upload-copy small{color:#8a9aa4;font-size:8px}

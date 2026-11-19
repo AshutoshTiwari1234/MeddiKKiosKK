@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { ayurvedaAssessmentSchema } from '../schemas/ayurvedaAssessmentSchema.js';
 import { api } from '../services/api.js';
+import AyurvedaDoshaRadar from './AyurvedaDoshaRadar.jsx';
 
 const defaults = { prakriti: 'not_assessed', vikriti: 'not_assessed', sara: '', samhanana: '', pramana: '', satmya: '', sattva: '', aharaShakti: '', vyayamaShakti: '', vaya: 'not_assessed', agni: 'not_assessed', koshtha: 'not_assessed', nidana: '' };
 const constitutionOptions = [['not_assessed', 'Not assessed'], ['vata', 'Vata'], ['pitta', 'Pitta'], ['kapha', 'Kapha'], ['vata_pitta', 'Vata–Pitta'], ['vata_kapha', 'Vata–Kapha'], ['pitta_kapha', 'Pitta–Kapha'], ['sama', 'Sama / balanced']];
@@ -21,7 +22,10 @@ export default function AyurvedaAssessmentForm({ patient, onUpdated }) {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const assessment = patient.ayurvedaAssessment || {};
-  const { register, handleSubmit, reset } = useForm({ resolver: zodResolver(ayurvedaAssessmentSchema), defaultValues: { ...defaults, ...assessment } });
+  const { register, handleSubmit, reset, watch } = useForm({ resolver: zodResolver(ayurvedaAssessmentSchema), defaultValues: { ...defaults, ...assessment } });
+
+  const watchPrakriti = watch('prakriti') || 'not_assessed';
+  const watchVikriti = watch('vikriti') || 'not_assessed';
 
   useEffect(() => { reset({ ...defaults, ...(patient.ayurvedaAssessment || {}) }); }, [patient, reset]);
 
@@ -42,6 +46,7 @@ export default function AyurvedaAssessmentForm({ patient, onUpdated }) {
 
   return <section className="panel ayurveda-panel"><div className="panel-heading"><div><h2><Activity size={16} /> Ayurveda assessment</h2><p>Dashavidha Pariksha and related assessment · clinician entered</p></div><span className={`review-status ${assessment.assessedAt ? 'approved' : 'pending'}`}>{assessment.assessedAt ? 'Assessment saved' : 'Not assessed'}</span></div>
     {error && <div className="admin-alert error" role="alert">{error}</div>}{notice && <div className="admin-alert success" role="status"><Check size={15} />{notice}</div>}
+    <AyurvedaDoshaRadar prakriti={watchPrakriti} vikriti={watchVikriti} />
     <form onSubmit={handleSubmit(save)}>
       <h3 className="ayurveda-section-title">Dashavidha Pariksha</h3><div className="ayurveda-grid">
         <SelectField name="prakriti" label="Prakriti" options={constitutionOptions} register={register} />

@@ -21,6 +21,7 @@ class ConversationResult:
     mode: str
     reply: str
     follow_up_question: str | None = None
+    follow_up_field: str | None = None
     urgent: bool = False
     urgent_message: str | None = None
 
@@ -61,7 +62,21 @@ class RuleBasedDemoEngine(ConversationEngine):
                         if language == 'en'
                         else 'सिरदर्द कब शुरू हुआ, और क्या यह लगातार रहता है या आता-जाता है?'
                     ),
+                    follow_up_field='onset',
                 )
+            targeted_followups = (
+                (('fever', 'temperature', 'बुखार'), 'duration', 'How long have you had the fever?', 'आपको बुखार कितने समय से है?'),
+                (('cough', 'खांसी', 'खाँसी'), 'duration', 'When did the cough begin, and is it happening often?', 'खाँसी कब शुरू हुई, और क्या यह बार-बार होती है?'),
+                (('stomach ache', 'stomach pain', 'abdominal pain', 'पेट दर्द', 'पेट में दर्द'), 'onset', 'When did the stomach pain begin?', 'पेट दर्द कब शुरू हुआ?'),
+            )
+            for terms, target_field, en_question, hi_question in targeted_followups:
+                if any(term in trimmed for term in terms):
+                    return ConversationResult(
+                        mode='demo',
+                        reply='I can ask one brief question to understand this concern better.' if language == 'en' else 'इस परेशानी को बेहतर समझने के लिए मैं एक छोटा सवाल पूछूँगा।',
+                        follow_up_question=en_question if language == 'en' else hi_question,
+                        follow_up_field=target_field,
+                    )
             if trimmed in VAGUE_COMPLAINTS or len(trimmed) < 12:
                 return ConversationResult(
                     mode='demo',

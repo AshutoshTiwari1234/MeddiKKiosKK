@@ -10,17 +10,21 @@ const PatientWelcomePage = lazy(() => import('./pages/PatientWelcomePage.jsx'));
 const StaffUsersPage = lazy(() => import('./pages/StaffUsersPage.jsx'));
 const PatientsPage = lazy(() => import('./pages/PatientsPage.jsx'));
 const PatientRecordPage = lazy(() => import('./pages/PatientRecordPage.jsx'));
+const WaitingHallDisplayPage = lazy(() => import('./pages/WaitingHallDisplayPage.jsx'));
 
 function AuthBootstrap() {
   const dispatch = useDispatch();
   const location = useLocation();
   const isPatientKiosk = location.pathname === '/patient';
+  const isDisplay = location.pathname === '/display';
+  const isPublicScreen = isPatientKiosk || isDisplay;
   const status = useSelector((state) => state.auth.status);
   const user = useSelector((state) => state.auth.user);
 
-  useEffect(() => { if (!isPatientKiosk) dispatch(loadCurrentUser()); }, [dispatch, isPatientKiosk]);
+  useEffect(() => { if (!isPublicScreen) dispatch(loadCurrentUser()); }, [dispatch, isPublicScreen]);
 
   if (isPatientKiosk) return <Suspense fallback={<div className="auth-loading"><span className="loading-spinner" /> Loading check-in…</div>}><PatientWelcomePage /></Suspense>;
+  if (isDisplay) return <Suspense fallback={<div className="auth-loading"><span className="loading-spinner" /> Loading OPD Waiting Display…</div>}><WaitingHallDisplayPage /></Suspense>;
 
   if (status === 'checking') return <div className="auth-loading"><span className="loading-spinner" /> Checking secure session…</div>;
 
@@ -33,6 +37,7 @@ function AuthBootstrap() {
       <Route path="/patients" element={user ? <PatientsPage /> : <Navigate to="/login" replace />} />
       <Route path="/patients/:patientId" element={user ? <PatientRecordPage /> : <Navigate to="/login" replace />} />
       <Route path="/patient" element={<PatientWelcomePage />} />
+      <Route path="/display" element={<WaitingHallDisplayPage />} />
       <Route path="*" element={<Navigate to={user ? '/' : '/login'} replace />} />
     </Routes>
   </Suspense>;

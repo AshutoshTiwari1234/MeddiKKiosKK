@@ -18,10 +18,30 @@ const CASE_FIELDS = [
 const VERIFIED_HISTORY_FIELDS = CASE_FIELDS;
 
 async function registerPatient(request, response) {
-  const { consent, dateOfBirth, ...details } = request.validatedBody;
+  const { consent, dateOfBirth, department = 'General Medicine', ...details } = request.validatedBody;
   const intakeToken = crypto.randomBytes(32).toString('hex');
+
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+  const todayCount = await Patient.countDocuments({ createdAt: { $gte: todayStart } });
+  const tokenNum = 101 + todayCount;
+  const prefixMap = {
+    'Ayurveda / AYUSH': { prefix: 'AY', room: 'Room 3 (AYUSH OPD)' },
+    'General Medicine': { prefix: 'GM', room: 'Room 1 (General OPD)' },
+    'Pediatrics': { prefix: 'PED', room: 'Room 2 (Pediatrics)' },
+    'Orthopedics': { prefix: 'ORT', room: 'Room 4 (Orthopedics)' },
+    'Cardiology': { prefix: 'CARD', room: 'Room 5 (Cardiology)' },
+    'Dermatology': { prefix: 'DERM', room: 'Room 6 (Dermatology)' },
+  };
+  const { prefix, room } = prefixMap[department] || { prefix: 'OPD', room: 'Room 1 (General OPD)' };
+  const queueToken = `${prefix}-${tokenNum}`;
+
   const patient = await Patient.create({
     ...details,
+    department,
+    queueToken,
+    roomNumber: room,
+    callStatus: 'waiting',
     dateOfBirth: dateOfBirth ? new Date(`${dateOfBirth}T00:00:00.000Z`) : null,
     consent: { ...consent, recordedAt: new Date(), policyVersion: '1.0' },
     consentHistory: [{ ...consent, recordedAt: new Date(), policyVersion: '1.0', source: 'kiosk' }],
@@ -73,7 +93,7 @@ async function getConversationReply(request, response) {
     intakeExpiresAt: { $gt: new Date() },
     'consent.caseTaking': true,
     caseStatus: { $ne: 'completed' },
-  }).select('+intakeCredentialHash +intakeExpiresAt consent.aiAssistance');
+  }).select('+intakeCredentialHash +intakeExpiresAt patientId consent.aiAssistance');
   if (!patient) throw new AppError('This check-in session has expired. Please ask reception for help.', 401);
 
   if (hasUrgentPhrase(request.validatedBody.answer)) {
@@ -158,7 +178,7 @@ async function listPatients(request, response, filters = request.query) {
   }
 
   const [patients, total] = await Promise.all([
-    Patient.find(filter).select('patientId fullName dateOfBirth gender phone preferredLanguage caseStatus clinicalReview.status createdAt caseHistoryUpdatedAt')
+    Patient.find(filter).select('patientId fullName dateOfBirth gender phone preferredLanguage department queueToken roomNumber callStatus caseStatus clinicalReview.status createdAt caseHistoryUpdatedAt vitals')
       .sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit).lean(),
     Patient.countDocuments(filter),
   ]);
@@ -230,4 +250,85 @@ async function updateAyurvedaAssessment(request, response) {
   response.json({ ayurvedaAssessment: patient.ayurvedaAssessment });
 }
 
-module.exports = { getConversationReply, getPatient, listPatients, registerPatient, saveIntakeProgress, searchPatients, updateAyurvedaAssessment, updateClinicalReview, updateIntakeConsent };
+async function updatePatientVitals(request, response) {
+  const patient = await Patient.findOne({ patientId: request.params.patientId });
+  if (!patient) throw new AppError('Patient record not found.', 404);
+  const vitalsData = request.validatedBody;
+  let bmi = null;
+  if (vitalsData.weight && vitalsData.height) {
+    const heightInMeters = vitalsData.height / 100;
+    bmi = Number((vitalsData.weight / (heightInMeters * heightInMeters)).toFixed(1));
+  }
+  patient.vitals = {
+    ...vitalsData,
+    bmi: bmi !== null ? bmi : patient.vitals?.bmi || null,
+    recordedAt: new Date(),
+    recordedBy: request.user._id,
+  };
+  await patient.save();
+  await recordAudit(request, { action: 'patient.vitals.update', resourceType: 'patient', resourceId: patient.patientId });
+  response.json({ vitals: patient.vitals });
+}
+
+async function updatePatientPrescription(request, response) {
+  const patient = await Patient.findOne({ patientId: request.params.patientId });
+  if (!patient) throw new AppError('Patient record not found.', 404);
+  const { followUpDate, ...rest } = request.validatedBody;
+  patient.prescription = {
+    ...rest,
+    followUpDate: followUpDate ? new Date(`${followUpDate}T00:00:00.000Z`) : null,
+    prescribedAt: new Date(),
+    prescribedBy: request.user._id,
+  };
+  await patient.save();
+  await recordAudit(request, { action: 'patient.prescription.update', resourceType: 'patient', resourceId: patient.patientId });
+  response.json({ prescription: patient.prescription });
+}
+
+async function callPatientToken(request, response) {
+  const patient = await Patient.findOne({ patientId: request.params.patientId });
+  if (!patient) throw new AppError('Patient record not found.', 404);
+  const { status = 'called' } = request.body || {};
+  patient.callStatus = status;
+  await patient.save();
+  await recordAudit(request, { action: `patient.call_status.${status}`, resourceType: 'patient', resourceId: patient.patientId });
+  response.json({ patientId: patient.patientId, queueToken: patient.queueToken, callStatus: patient.callStatus, roomNumber: patient.roomNumber });
+}
+
+async function getLiveQueue(request, response) {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const patients = await Patient.find({ createdAt: { $gte: today } })
+    .select('patientId fullName department queueToken roomNumber callStatus caseStatus clinicalReview.status createdAt')
+    .sort({ createdAt: 1 })
+    .lean();
+
+  const nowCalling = patients.filter((p) => p.callStatus === 'called');
+  const waiting = patients.filter((p) => p.callStatus === 'waiting' && p.caseStatus !== 'not_started');
+  const completed = patients.filter((p) => p.clinicalReview?.status === 'approved' || p.callStatus === 'done');
+
+  response.json({
+    date: new Date().toISOString(),
+    totalToday: patients.length,
+    nowCalling,
+    waiting,
+    completed,
+    patients,
+  });
+}
+
+module.exports = {
+  callPatientToken,
+  getConversationReply,
+  getLiveQueue,
+  getPatient,
+  listPatients,
+  registerPatient,
+  saveIntakeProgress,
+  searchPatients,
+  updateAyurvedaAssessment,
+  updateClinicalReview,
+  updateIntakeConsent,
+  updatePatientPrescription,
+  updatePatientVitals,
+};

@@ -35,6 +35,42 @@ function urgentReply(language) {
   };
 }
 
+function localConversationRuleEngine(payload) {
+  const language = payload.language || 'en';
+  const field = payload.field;
+  const answer = String(payload.answer || '').trim().toLowerCase();
+  const followUpAlreadyAsked = Boolean(payload.followUpAnswer);
+
+  if (field === 'chiefComplaint' && !followUpAlreadyAsked) {
+    if (['headache', 'head pain', 'migraine', 'सिरदर्द', 'सिर दर्द'].some((t) => answer.includes(t))) {
+      return {
+        mode: 'demo',
+        reply: language === 'hi' ? 'सिरदर्द को बेहतर समझने के लिए मैं एक छोटा सवाल पूछूँगा।' : 'I can ask one brief question to better understand your headache.',
+        followUpQuestion: language === 'hi' ? 'सिरदर्द कब शुरू हुआ, और क्या यह लगातार रहता है या आता-जाता है?' : 'When did the headache begin, and has it been constant or come and go?',
+        followUpField: 'onset',
+        urgent: false,
+      };
+    }
+    const vagueWords = ['pain', 'problem', 'unwell', 'not well', 'issue', 'discomfort', 'दर्द', 'तकलीफ', 'परेशानी'];
+    if (vagueWords.some((w) => answer === w || answer.includes(w)) || answer.length < 12) {
+      return {
+        mode: 'demo',
+        reply: language === 'hi' ? 'आपकी परेशानी को बेहतर समझने के लिए मैं एक और प्रश्न पूछूंगा।' : 'I can ask one more question to make sure we understand your concern.',
+        followUpQuestion: language === 'hi' ? 'कृपया अपनी मुख्य परेशानी के बारे में अपने शब्दों में थोड़ा और बताएं।' : 'Could you describe the main concern in a little more detail, in your own words?',
+        followUpField: 'character',
+        urgent: false,
+      };
+    }
+  }
+
+  return {
+    mode: 'demo',
+    reply: language === 'hi' ? 'जानकारी साझा करने के लिए धन्यवाद। जिस प्रश्न का उत्तर न पता हो, उसे छोड़ सकते हैं।' : 'Thank you for sharing. You can skip any question you are unsure about.',
+    followUpQuestion: null,
+    urgent: false,
+  };
+}
+
 async function requestConversation(payload) {
   if (hasUrgentPhrase(payload.answer)) return urgentReply(payload.language);
   const baseUrl = (process.env.AI_SERVICE_URL || 'http://127.0.0.1:8000').replace(/\/$/, '');
@@ -48,14 +84,7 @@ async function requestConversation(payload) {
     if (!response.ok) throw new Error(`AI service returned ${response.status}`);
     return await response.json();
   } catch (_error) {
-    return {
-      mode: 'guided_fallback',
-      reply: payload.language === 'hi'
-        ? 'धन्यवाद। अगला प्रश्न आपकी जानकारी को समझने में मदद करेगा।'
-        : 'Thank you for sharing. The next question will help your care team understand your experience.',
-      followUpQuestion: null,
-      urgent: false,
-    };
+    return localConversationRuleEngine(payload);
   }
 }
 

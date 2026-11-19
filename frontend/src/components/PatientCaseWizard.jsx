@@ -1,7 +1,20 @@
-import { ArrowLeft, ArrowRight, CheckCircle2, FileUp, HeartPulse, Mic, Volume2, ShieldAlert } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { ArrowLeft, ArrowRight, CheckCircle2, FileUp, HeartPulse, Mic, Volume2, ShieldAlert, Sparkles } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
 import { api } from '../services/api.js';
 import '../patient-consent.css';
+import AudioWaveform from './AudioWaveform.jsx';
+import BodyMapSelector from './BodyMapSelector.jsx';
+import PainScaleSelector from './PainScaleSelector.jsx';
+import DigitalTokenSlip from './DigitalTokenSlip.jsx';
+
+const COMPLAINT_CHIPS = [
+  { en: 'Knee joint pain & morning stiffness (Amavata)', hi: 'घुटनों व जोड़ों में दर्द / सुबह की अकड़न (आमवात)' },
+  { en: 'Severe throbbing headache & nausea (Migraine)', hi: 'तेज़ सिरदर्द (माइग्रेन) और मतली' },
+  { en: 'Dry cough, sore throat & low fever', hi: 'सूखी खांसी, गले में खराश और हल्का बुखार' },
+  { en: 'Upper stomach ache, burning & acidity', hi: 'ऊपरी पेट में दर्द, जलन और एसिडिटी' },
+  { en: 'Severe lower back ache & spine stiffness', hi: 'कमर व रीढ़ की हड्डी में तेज़ दर्द' },
+  { en: 'Skin itching, red rash & allergies', hi: 'त्वचा में खुजली, लाल चकत्ते व एलर्जी' },
+];
 
 const questions = [
   { field: 'chiefComplaint', required: true, kind: 'textarea', en: 'What is bothering you most today?', hi: 'आज आपको सबसे अधिक क्या परेशानी है?', helpEn: 'In your own words, what would you like the doctor to know?', helpHi: 'अपने शब्दों में बताइए कि आप डॉक्टर को क्या बताना चाहते हैं।', placeholderEn: 'For example: I have had a headache since yesterday…', placeholderHi: 'उदाहरण: कल से मेरे सिर में दर्द है…' },
@@ -31,16 +44,26 @@ const copy = {
 export default function PatientCaseWizard({ language = 'en', patientId, token, documentsConsent = false, aiConsent = false, onConsentChange, onConsentRevoked, onComplete }) {
   const t = copy[language] || copy.en;
   const [index, setIndex] = useState(0);
-  const [answers, setAnswers] = useState({});
+  const [answers, setAnswers] = useState(() => {
+    try {
+      const stored = sessionStorage.getItem('medikiosk-preset-answers');
+      if (stored) return JSON.parse(stored);
+    } catch (_e) {}
+    return {};
+  });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [assistantReply, setAssistantReply] = useState('');
   const [assistantMode, setAssistantMode] = useState('');
   const [followUpPrompt, setFollowUpPrompt] = useState('');
   const [followUpBaseAnswer, setFollowUpBaseAnswer] = useState('');
+  const [followUpTargetField, setFollowUpTargetField] = useState('');
   const [urgentNotice, setUrgentNotice] = useState('');
   const [voiceError, setVoiceError] = useState('');
+  const [voiceNotice, setVoiceNotice] = useState('');
+  const [voicePreparing, setVoicePreparing] = useState(false);
   const [listening, setListening] = useState(false);
+  const recognitionRef = useRef(null);
   const [documentCategory, setDocumentCategory] = useState('lab_report');
   const [documentBusy, setDocumentBusy] = useState(false);
   const [documentMessage, setDocumentMessage] = useState('');
@@ -50,39 +73,111 @@ export default function PatientCaseWizard({ language = 'en', patientId, token, d
   const isLast = index === questions.length - 1;
 
   useEffect(() => () => {
+    recognitionRef.current?.abort();
     window.speechSynthesis?.cancel();
   }, []);
 
-  const startVoiceInput = () => {
+  const startVoiceInput = async () => {
+    if (listening) {
+      recognitionRef.current?.stop();
+      return;
+    }
+    const localHost = ['localhost', '127.0.0.1'].includes(window.location.hostname);
+    if (!window.isSecureContext && !localHost) {
+      setVoiceError(language === 'hi' ? 'वॉइस इनपुट के लिए सुरक्षित HTTPS कनेक्शन ज़रूरी है।' : 'Voice input requires a secure HTTPS connection.');
+      return;
+    }
     const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!Recognition) {
       setVoiceError(language === 'hi' ? 'इस ब्राउज़र में वॉइस इनपुट उपलब्ध नहीं है। Chrome या Edge में खोलें, या जवाब टाइप करें।' : 'Voice input is not supported by this browser. Open this page in Chrome or Edge, or type your answer.');
       return;
     }
     setVoiceError('');
-    const recognition = new Recognition();
+    setVoiceNotice('');
+    let recognition;
+    try { recognition = new Recognition(); } catch (_error) {
+      setVoiceError(language === 'hi' ? 'माइक्रोफ़ोन शुरू नहीं हो सका। अनुमति जाँचें या जवाब टाइप करें।' : 'Could not start the microphone. Check its permission or type your answer.');
+      return;
+    }
+    recognitionRef.current = recognition;
     recognition.lang = language === 'hi' ? 'hi-IN' : 'en-IN';
     recognition.interimResults = true;
     recognition.continuous = false;
     recognition.maxAlternatives = 1;
     recognition.onstart = () => setListening(true);
-    recognition.onend = () => setListening(false);
+    recognition.onend = () => {
+      setListening(false);
+      if (recognitionRef.current === recognition) recognitionRef.current = null;
+    };
     recognition.onerror = (event) => {
       setListening(false);
-      setVoiceError(event.error === 'not-allowed' || event.error === 'service-not-allowed'
-        ? (language === 'hi' ? 'माइक्रोफ़ोन की अनुमति दें और पेज को HTTPS पर खोलें।' : 'Allow microphone access and open this page over HTTPS.')
-        : event.error === 'no-speech'
-          ? (language === 'hi' ? 'आवाज़ नहीं मिली। बोलकर फिर कोशिश करें।' : 'No speech was detected. Speak and try again.')
-          : (language === 'hi' ? 'आवाज़ पहचानी नहीं जा सकी। फिर कोशिश करें या जवाब टाइप करें।' : 'Speech could not be recognized. Try again or type your answer.'));
+        const messages = {
+          denied: language === 'hi' ? 'माइक्रोफ़ोन की अनुमति दें और पेज को HTTPS पर खोलें।' : 'Allow microphone access and open this page over HTTPS.',
+          noSpeech: language === 'hi' ? 'आवाज़ नहीं मिली। माइक्रोफ़ोन के पास बोलकर फिर कोशिश करें।' : 'No speech was detected. Check your microphone and speak after the listening indicator appears.',
+          network: language === 'hi' ? 'ब्राउज़र की ऑनलाइन वॉइस सेवा उपलब्ध नहीं है। इंटरनेट जाँचें या Chrome/Edge में फिर कोशिश करें।' : 'The browser’s online speech service is unavailable. Check your internet connection or try Chrome/Edge again.',
+          localUnavailable: language === 'hi' ? 'ऑफ़लाइन वॉइस पैक उपलब्ध नहीं है। इंटरनेट से भाषा पैक डाउनलोड करें या बाद में फिर कोशिश करें।' : 'The on-device voice pack is unavailable. Connect to the internet to download the language pack, then try again.',
+          capture: language === 'hi' ? 'माइक्रोफ़ोन उपलब्ध नहीं है या किसी अन्य ऐप में उपयोग हो रहा है।' : 'The microphone is unavailable or being used by another app.',
+          language: language === 'hi' ? 'इस भाषा के लिए वॉइस पहचान उपलब्ध नहीं है।' : 'Speech recognition is unavailable for this language.',
+          other: language === 'hi' ? 'आवाज़ पहचानी नहीं जा सकी। फिर कोशिश करें या जवाब टाइप करें।' : 'Speech could not be recognized. Try again or type your answer.',
+        };
+        const message = event.error === 'not-allowed' ? messages.denied
+          : event.error === 'service-not-allowed' ? messages.localUnavailable
+          : event.error === 'no-speech' ? messages.noSpeech
+            : event.error === 'network' ? messages.network
+              : event.error === 'audio-capture' ? messages.capture
+                : event.error === 'language-not-supported' ? messages.language : messages.other;
+        setVoiceError(message);
     };
     recognition.onresult = (event) => {
       const transcript = Array.from(event.results || []).map((result) => result[0]?.transcript || '').join(' ').trim();
       if (transcript) setAnswers((current) => ({ ...current, [question.field]: transcript }));
     };
-    try { recognition.start(); } catch (_error) {
-      setListening(false);
-      setVoiceError(language === 'hi' ? 'माइक्रोफ़ोन शुरू नहीं हो सका। अनुमति जाँचें या जवाब टाइप करें।' : 'Could not start the microphone. Check its permission or type your answer.');
+    const beginRecognition = () => {
+      try { recognition.start(); } catch (_error) {
+        setListening(false);
+        setVoiceError(language === 'hi' ? 'माइक्रोफ़ोन शुरू नहीं हो सका। अनुमति जाँचें या जवाब टाइप करें।' : 'Could not start the microphone. Check its permission or type your answer.');
+      }
+    };
+
+    if (typeof Recognition.available === 'function' && typeof Recognition.install === 'function' && 'processLocally' in recognition) {
+      setVoicePreparing(true);
+      const preferredLanguage = language === 'hi' ? 'hi-IN' : 'en-IN';
+      let availability = 'unavailable';
+      let localLanguage = preferredLanguage;
+      try {
+        availability = await Recognition.available({ langs: [preferredLanguage], processLocally: true });
+        if (availability === 'unavailable' && language === 'en') {
+          localLanguage = 'en-US';
+          availability = await Recognition.available({ langs: [localLanguage], processLocally: true });
+        }
+        if (availability === 'available') {
+          recognition.lang = localLanguage;
+          recognition.processLocally = true;
+          setVoiceNotice(language === 'hi' ? 'आवाज़ आपके डिवाइस पर पहचानी जाएगी।' : 'Speech will be recognized on this device.');
+          setVoicePreparing(false);
+          beginRecognition();
+          return;
+        }
+        if (availability === 'downloadable' || availability === 'downloading') {
+          const installed = await Recognition.install({ langs: [localLanguage], processLocally: true });
+          setVoicePreparing(false);
+          if (installed) setVoiceNotice(language === 'hi' ? 'ऑफ़लाइन भाषा पैक तैयार है। वॉइस इनपुट शुरू करने के लिए फिर से दबाएँ।' : 'The on-device language pack is ready. Press Speak answer again to begin.');
+          else setVoiceError(language === 'hi' ? 'ऑफ़लाइन भाषा पैक डाउनलोड नहीं हुआ। इंटरनेट जाँचकर फिर कोशिश करें।' : 'The on-device language pack could not be downloaded. Check your internet and try again.');
+          return;
+        }
+        if (availability === 'unavailable') {
+          setVoicePreparing(false);
+          setVoiceError(language === 'hi' ? 'इस भाषा के लिए डिवाइस पर वॉइस पहचान उपलब्ध नहीं है। Chrome को अपडेट करें या जवाब टाइप करें।' : 'On-device recognition is unavailable for this language in this browser. Update Chrome or type your answer.');
+          return;
+        }
+      } catch (_error) {
+        setVoicePreparing(false);
+        setVoiceError(language === 'hi' ? 'डिवाइस पर वॉइस पैक तैयार नहीं हो सका। इंटरनेट जाँचें और फिर कोशिश करें।' : 'Could not prepare the on-device voice pack. Check your internet and try again.');
+        return;
+      }
+      setVoicePreparing(false);
     }
+    beginRecognition();
   };
 
   const readQuestion = () => {
@@ -191,10 +286,11 @@ export default function PatientCaseWizard({ language = 'en', patientId, token, d
       }
 
       const submittedAnswer = skip ? '' : followUpPrompt
-        ? `${followUpBaseAnswer}\nAdditional detail: ${String(answer)}`
+        ? followUpTargetField ? String(answer) : `${followUpBaseAnswer}\nAdditional detail: ${String(answer)}`
         : question.kind === 'scale' ? Number(answer) : String(answer);
-      const valueLimit = ['chiefComplaint', 'character', 'associatedSymptoms'].includes(question.field) ? 1000 : question.field === 'severity' ? Infinity : 2000;
-      const patch = skip ? {} : { [question.field]: typeof submittedAnswer === 'string' ? submittedAnswer.slice(0, valueLimit) : submittedAnswer };
+      const targetField = followUpPrompt && followUpTargetField ? followUpTargetField : question.field;
+      const targetLimit = ['chiefComplaint', 'character', 'associatedSymptoms'].includes(targetField) ? 1000 : targetField === 'severity' ? Infinity : 2000;
+      const patch = skip ? {} : { [targetField]: typeof submittedAnswer === 'string' ? submittedAnswer.slice(0, targetLimit) : submittedAnswer };
 
       if (Object.keys(patch).length) await api.patch('/patients/intake/case-history', patch, headers);
 
@@ -206,6 +302,7 @@ export default function PatientCaseWizard({ language = 'en', patientId, token, d
       if (!skip && conversation?.followUpQuestion && !followUpPrompt) {
         setFollowUpBaseAnswer(String(submittedAnswer));
         setFollowUpPrompt(conversation.followUpQuestion);
+        setFollowUpTargetField(conversation.followUpField || '');
         setAnswers((current) => ({ ...current, [question.field]: '' }));
         return;
       }
@@ -215,7 +312,7 @@ export default function PatientCaseWizard({ language = 'en', patientId, token, d
         sessionStorage.removeItem('medikiosk-intake-token');
         onComplete();
       } else {
-        if (!skip) setAnswers((current) => ({ ...current, [question.field]: submittedAnswer }));
+        if (!skip) setAnswers((current) => ({ ...current, [targetField]: submittedAnswer }));
         else {
           setAssistantReply('');
           setAssistantMode('');
@@ -223,7 +320,12 @@ export default function PatientCaseWizard({ language = 'en', patientId, token, d
         setFollowUpPrompt('');
         setFollowUpBaseAnswer('');
         setUrgentNotice('');
-        setIndex((current) => Math.min(current + 1, questions.length - 1));
+        const nextIndex = Math.min(index + 1, questions.length - 1);
+        const targetIndex = followUpTargetField ? questions.findIndex((item) => item.field === followUpTargetField) : -1;
+        if (targetIndex === nextIndex) {
+          setFollowUpTargetField('');
+          setIndex(Math.min(nextIndex + 1, questions.length - 1));
+        } else setIndex(nextIndex);
       }
     } catch (requestError) {
       setError(requestError.response?.data?.error?.message || t.error);
@@ -236,18 +338,115 @@ export default function PatientCaseWizard({ language = 'en', patientId, token, d
     <div className="case-wizard-top"><div><span className="intake-step-label">{t.step} {index + 1} / {questions.length}</span><div className="case-progress"><span style={{ width: `${((index + 1) / questions.length) * 100}%` }} /></div></div><span className="patient-id-chip">{patientId}</span></div>
     <details className="consent-controls"><summary>Privacy and consent options</summary><p>Your choices are recorded. You can stop optional processing or withdraw case-taking consent at any time.</p><div>{aiConsent && <button type="button" disabled={saving} onClick={() => withdrawConsent({ aiAssistance: false })}>Turn off AI assistance</button>}{documentsConsent && <button type="button" disabled={saving || documentBusy} onClick={() => withdrawConsent({ documentProcessing: false })}>Turn off document processing</button>}<button type="button" className="consent-withdraw" disabled={saving} onClick={() => withdrawConsent({ caseTaking: false, aiAssistance: false, documentProcessing: false })}>Stop check-in and withdraw consent</button></div></details>
     {documentsConsent && <section className="patient-document-upload" aria-label="Upload a previous medical document"><div className="document-upload-copy"><FileUp size={17} /><div><b>{language === 'hi' ? 'पिछली रिपोर्ट अपलोड करें' : 'Upload a previous medical record'}</b><small>{language === 'hi' ? 'PDF, JPG या PNG · अधिकतम 10 MB' : 'PDF, JPG, or PNG · up to 10 MB'}</small></div></div><div className="document-upload-controls"><select value={documentCategory} onChange={(event) => setDocumentCategory(event.target.value)} aria-label={language === 'hi' ? 'दस्तावेज़ का प्रकार' : 'Document type'}><option value="prescription">{language === 'hi' ? 'पर्चा' : 'Prescription'}</option><option value="lab_report">{language === 'hi' ? 'लैब रिपोर्ट' : 'Lab report'}</option><option value="discharge_summary">{language === 'hi' ? 'डिस्चार्ज सारांश' : 'Discharge summary'}</option><option value="other">{language === 'hi' ? 'अन्य' : 'Other'}</option></select><label className={`button button-secondary document-pick ${documentBusy ? 'is-busy' : ''}`}><FileUp size={14} /> {documentBusy ? (language === 'hi' ? 'अपलोड हो रहा है…' : 'Uploading…') : (language === 'hi' ? 'फ़ाइल चुनें' : 'Choose file')}<input type="file" accept="application/pdf,image/jpeg,image/png" disabled={documentBusy} onChange={uploadMedicalDocument} /></label></div>{documentMessage && <p className="document-upload-status success">{documentMessage}</p>}{documentError && <p className="document-upload-status error" role="alert">{documentError}</p>}</section>}
-    <div className="case-question"><span className="case-question-icon"><HeartPulse size={19} /></span><h1>{followUpPrompt || question[language] || question.en}</h1>{assistantReply && <span className="assistant-mode">{assistantMode === 'demo' ? (language === 'hi' ? 'वार्तालाप डेमो' : 'Conversation demo') : assistantMode === 'llm' ? (language === 'hi' ? 'AI सहायक' : 'AI assistant') : assistantMode === 'guided_fallback' ? (language === 'hi' ? 'AI सेवा उपलब्ध नहीं · सामान्य प्रश्न जारी' : 'AI unavailable · guided questions continue') : (language === 'hi' ? 'निर्देशित चेक-इन' : 'Guided check-in')}</span>}<p>{assistantReply || question[`help${language === 'hi' ? 'Hi' : 'En'}`]}</p>
-      {question.kind === 'scale' && !followUpPrompt ? <div className="severity-control"><input type="range" min="0" max="10" value={answer} onChange={(event) => setAnswers((current) => ({ ...current, severity: event.target.value }))} aria-label={question.en} /><div><span>0</span><b>{answer} / 10</b><span>10</span></div></div> : question.kind === 'textarea' ? <textarea autoFocus rows={5} value={answer} onChange={(event) => setAnswers((current) => ({ ...current, [question.field]: event.target.value }))} placeholder={followUpPrompt ? (language === 'hi' ? 'वैकल्पिक विवरण' : 'Add any detail you remember') : question[`placeholder${language === 'hi' ? 'Hi' : 'En'}`]} maxLength={question.field === 'chiefComplaint' || question.field === 'character' || question.field === 'associatedSymptoms' ? 1000 : 2000} /> : <input autoFocus type="text" value={answer} onChange={(event) => setAnswers((current) => ({ ...current, [question.field]: event.target.value }))} placeholder={followUpPrompt ? (language === 'hi' ? 'वैकल्पिक विवरण' : 'Add any detail you remember') : question[`placeholder${language === 'hi' ? 'Hi' : 'En'}`]} maxLength={500} />}
-      {question.kind !== 'scale' && <div className="voice-actions"><button type="button" className="voice-button" onClick={startVoiceInput} disabled={saving || listening}><Mic size={15} /> {listening ? (language === 'hi' ? 'सुन रहे हैं…' : 'Listening…') : (language === 'hi' ? 'बोलकर बताएं' : 'Speak answer')}</button><button type="button" className="voice-button voice-read" onClick={readQuestion}><Volume2 size={15} /> {language === 'hi' ? 'प्रश्न सुनें' : 'Read question'}</button><span>{language === 'hi' ? 'आवाज़ आपके ब्राउज़र की speech सुविधा से पहचानी जाएगी।' : 'Speech recognition uses your browser’s speech feature.'}</span></div>}
+    <div className="case-question">
+      <span className="case-question-icon"><HeartPulse size={19} /></span>
+      <h1>{followUpPrompt || question[language] || question.en}</h1>
+      {assistantReply && <span className="assistant-mode">{assistantMode === 'demo' ? (language === 'hi' ? 'वार्तालाप डेमो' : 'Conversation demo') : assistantMode === 'llm' ? (language === 'hi' ? 'AI सहायक' : 'AI assistant') : assistantMode === 'guided_fallback' ? (language === 'hi' ? 'AI सेवा उपलब्ध नहीं · सामान्य प्रश्न जारी' : 'AI unavailable · guided questions continue') : (language === 'hi' ? 'निर्देशित चेक-इन' : 'Guided check-in')}</span>}
+      <p>{assistantReply || question[`help${language === 'hi' ? 'Hi' : 'En'}`]}</p>
+
+      {/* Chief Complaint Quick Preset Chips */}
+      {question.field === 'chiefComplaint' && !followUpPrompt && (
+        <div className="complaint-suggestions">
+          <span className="complaint-sugg-title">
+            <Sparkles size={13} /> {language === 'hi' ? 'त्वरित सामान्य लक्षण (टैप करें):' : 'Common symptoms (tap to choose):'}
+          </span>
+          <div className="complaint-chips-grid">
+            {COMPLAINT_CHIPS.map((chip) => (
+              <button
+                key={chip.en}
+                type="button"
+                className="complaint-chip-btn"
+                onClick={() => setAnswers((curr) => ({ ...curr, chiefComplaint: language === 'hi' ? chip.hi : chip.en }))}
+              >
+                {language === 'hi' ? chip.hi : chip.en}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Interactive Body Map for Location */}
+      {question.field === 'location' && !followUpPrompt ? (
+        <div className="bodymap-question-block">
+          <BodyMapSelector
+            language={language}
+            value={answer}
+            onChange={(loc) => setAnswers((curr) => ({ ...curr, location: loc }))}
+          />
+          <div className="location-text-fallback">
+            <label htmlFor="custom-location-input">
+              <span>{language === 'hi' ? 'या सटीक स्थान लिखें:' : 'Or describe the area:'}</span>
+              <input
+                id="custom-location-input"
+                type="text"
+                value={answer}
+                onChange={(event) => setAnswers((current) => ({ ...current, location: event.target.value }))}
+                placeholder={language === 'hi' ? 'उदा. दायां घुटना, सिर का पिछला भाग...' : 'e.g. Right knee, back of head...'}
+                maxLength={500}
+              />
+            </label>
+          </div>
+        </div>
+      ) : question.kind === 'scale' && !followUpPrompt ? (
+        <PainScaleSelector
+          language={language}
+          value={answer}
+          onChange={(val) => setAnswers((curr) => ({ ...curr, severity: val }))}
+        />
+      ) : question.kind === 'textarea' ? (
+        <textarea
+          autoFocus
+          rows={5}
+          value={answer}
+          onChange={(event) => setAnswers((current) => ({ ...current, [question.field]: event.target.value }))}
+          placeholder={followUpPrompt ? (language === 'hi' ? 'वैकल्पिक विवरण' : 'Add any detail you remember') : question[`placeholder${language === 'hi' ? 'Hi' : 'En'}`]}
+          maxLength={question.field === 'chiefComplaint' || question.field === 'character' || question.field === 'associatedSymptoms' ? 1000 : 2000}
+        />
+      ) : (
+        <input
+          autoFocus
+          type="text"
+          value={answer}
+          onChange={(event) => setAnswers((current) => ({ ...current, [question.field]: event.target.value }))}
+          placeholder={followUpPrompt ? (language === 'hi' ? 'वैकल्पिक विवरण' : 'Add any detail you remember') : question[`placeholder${language === 'hi' ? 'Hi' : 'En'}`]}
+          maxLength={500}
+        />
+      )}
+
+      {/* Voice actions & Audio Waveform */}
+      {question.kind !== 'scale' && question.field !== 'location' && (
+        <div className="voice-actions">
+          <button type="button" className="voice-button" onClick={startVoiceInput} disabled={saving || voicePreparing}>
+            <Mic size={15} /> {voicePreparing ? (language === 'hi' ? 'आवाज़ तैयार हो रही है…' : 'Preparing voice…') : listening ? (language === 'hi' ? 'सुनना रोकें' : 'Stop listening') : (language === 'hi' ? 'बोलकर बताएं' : 'Speak answer')}
+          </button>
+          <button type="button" className="voice-button voice-read" onClick={readQuestion}>
+            <Volume2 size={15} /> {language === 'hi' ? 'प्रश्न सुनें' : 'Read question'}
+          </button>
+          <AudioWaveform
+            active={listening || voicePreparing}
+            label={listening ? (language === 'hi' ? 'आवाज़ सुन रहे हैं… बोलिए' : 'Listening… speak clearly now') : ''}
+          />
+          {voiceNotice && <span className="voice-notice" role="status">{voiceNotice}</span>}
+          {voiceError && <span className="voice-error" role="status">{voiceError}</span>}
+        </div>
+      )}
     </div>
     <div className={`urgent-reminder${urgentNotice ? ' urgent-notice' : ''}`}><ShieldAlert size={16} /><span>{urgentNotice || t.urgent}</span></div>
     {error && <div className="patient-api-error" role="alert">{error}</div>}
-    {voiceError && <div className="patient-api-error" role="status">{voiceError}</div>}
-    <div className="case-actions"><button type="button" className="patient-back-button" disabled={index === 0 || saving || Boolean(followUpPrompt) || Boolean(urgentNotice)} onClick={() => setIndex((current) => Math.max(0, current - 1))}><ArrowLeft size={16} /> {t.back}</button><div className="case-forward-actions">{!urgentNotice && !followUpPrompt && !question.required && <button type="button" className="skip-button" disabled={saving} onClick={() => saveAnswer(isLast, true)}>{t.skip}</button>}{urgentNotice ? <button type="button" className="button button-primary patient-next" disabled={saving} onClick={continueAfterStaffAlert}>{saving ? t.saving : language === 'hi' ? 'मैंने कर्मचारी को बता दिया है' : 'I have alerted a staff member'} <ArrowRight size={17} /></button> : <button type="button" className="button button-primary patient-next" disabled={saving || listening} onClick={() => saveAnswer(isLast)}>{saving ? t.saving : isLast ? t.finish : t.next} {saving ? null : isLast ? <CheckCircle2 size={17} /> : <ArrowRight size={17} />}</button>}</div></div>
+    <div className="case-actions"><button type="button" className="patient-back-button" disabled={index === 0 || saving || Boolean(followUpPrompt) || Boolean(urgentNotice)} onClick={() => setIndex((current) => Math.max(0, current - 1))}><ArrowLeft size={16} /> {t.back}</button><div className="case-forward-actions">{!urgentNotice && !followUpPrompt && !question.required && <button type="button" className="skip-button" disabled={saving} onClick={() => saveAnswer(isLast, true)}>{t.skip}</button>}{urgentNotice ? <button type="button" className="button button-primary patient-next" disabled={saving} onClick={continueAfterStaffAlert}>{saving ? t.saving : language === 'hi' ? 'मैंने कर्मचारी को बता दिया है' : 'I have alerted a staff member'} <ArrowRight size={17} /></button> : <button type="button" className="button button-primary patient-next" disabled={saving} onClick={() => saveAnswer(isLast)}>{saving ? t.saving : isLast ? t.finish : t.next} {saving ? null : isLast ? <CheckCircle2 size={17} /> : <ArrowRight size={17} />}</button>}</div></div>
   </section>;
 }
 
-export function PatientCheckInComplete({ language, patientId, onDone }) {
-  const t = copy[language] || copy.en;
-  return <section className="checkin-complete panel"><span className="complete-icon"><CheckCircle2 size={31} /></span><h1>{t.done}</h1><p>{t.doneSub}</p><small>{t.patientId}</small><strong>{patientId}</strong><button className="button button-primary" onClick={onDone}>{t.home} <ArrowRight size={16} /></button></section>;
+export function PatientCheckInComplete({ language, patientId, patient, onDone }) {
+  return (
+    <DigitalTokenSlip
+      language={language}
+      patientId={patientId}
+      patientName={patient?.fullName}
+      department={patient?.department}
+      queueToken={patient?.queueToken}
+      roomNumber={patient?.roomNumber}
+      onDone={onDone}
+    />
+  );
 }

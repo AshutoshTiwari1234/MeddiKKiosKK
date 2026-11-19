@@ -34,14 +34,25 @@ export default function PatientWelcomePage() {
   };
 
   return <main className="patient-screen">
-    <header className="patient-top"><Link to="/login" className="back-link"><ArrowLeft size={18} /> Staff portal</Link><Link to="/patient" className="brand"><span className="brand-mark"><Stethoscope size={19} /></span> medikiosk</Link><button className="language-button" onClick={() => setLanguage((current) => current === 'en' ? 'hi' : 'en')} aria-label="Change language"><Languages size={17} /> {language === 'en' ? 'English' : 'हिन्दी'} <span>⌄</span></button></header>
+    <header className="patient-top">
+      <div className="patient-top-left">
+        <Link to="/login" className="back-link"><ArrowLeft size={18} /> Staff portal</Link>
+        <Link to="/display" target="_blank" rel="noopener noreferrer" className="back-link waiting-display-pill" title="Open TV Waiting Room Screen">
+          <span className="live-dot" /> Waiting Room TV
+        </Link>
+      </div>
+      <Link to="/patient" className="brand"><span className="brand-mark"><Stethoscope size={19} /></span> medikiosk</Link>
+      <button className="language-button" onClick={() => setLanguage((current) => current === 'en' ? 'hi' : 'en')} aria-label="Change language">
+        <Languages size={17} /> {language === 'en' ? 'English' : 'हिन्दी'} <span>⌄</span>
+      </button>
+    </header>
     {stage === 'welcome' && <section className="patient-hero">
       <div className="patient-copy"><span className="eyebrow"><span className="live-dot" /> {t.eyebrow}</span><h1>{t.title}</h1><p>{t.intro}</p><div className="patient-assurances"><div><ShieldCheck size={18} /><span>{t.private}</span></div><div><span className="question-dot">1</span><span>{t.pace}</span></div></div><button className="button button-primary patient-start" onClick={() => setStage('register')}>{t.start} <ArrowRight size={18} /></button><small className="patient-note">{t.note}</small></div>
       <div className="patient-art" aria-hidden="true"><div className="art-halo" /><div className="art-card"><div className="art-card-top"><span className="art-icon"><Stethoscope size={19} /></span><span className="art-spark">✳</span></div><div className="art-line wide" /><div className="art-line mid" /><div className="art-wave"><span /><span /><span /><span /><span /><span /><span /><span /><span /><span /><span /></div><div className="art-caption"><div className="art-avatar">M</div><div><b>Here to listen</b><small>At your own pace</small></div><span className="art-check">✓</span></div></div><div className="art-pill"><span className="live-dot" /> A calmer start to care</div><span className="art-orbit orbit-one" /><span className="art-orbit orbit-two" /></div>
     </section>}
     {stage === 'register' && <PatientRegistrationForm language={language} onBack={() => setStage('welcome')} onRegistered={(createdPatient, intakeToken) => { const allowDocuments = Boolean(createdPatient.consent?.documentProcessing); const allowAi = Boolean(createdPatient.consent?.aiAssistance); sessionStorage.setItem('medikiosk-document-consent', String(allowDocuments)); sessionStorage.setItem('medikiosk-ai-consent', String(allowAi)); setDocumentsConsent(allowDocuments); setAiConsent(allowAi); setPatient(createdPatient); setToken(intakeToken); setStage('case'); }} />}
     {stage === 'case' && patient && token && <div className="case-page-wrap"><PatientCaseWizard language={language} patientId={patient.patientId} token={token} documentsConsent={documentsConsent} aiConsent={aiConsent} onConsentChange={(consent) => { if (typeof consent.documentProcessing === 'boolean') { setDocumentsConsent(consent.documentProcessing); sessionStorage.setItem('medikiosk-document-consent', String(consent.documentProcessing)); } if (typeof consent.aiAssistance === 'boolean') { setAiConsent(consent.aiAssistance); sessionStorage.setItem('medikiosk-ai-consent', String(consent.aiAssistance)); } }} onConsentRevoked={resetKiosk} onComplete={() => setStage('done')} /></div>}
-    {stage === 'done' && patient && <PatientCheckInComplete language={language} patientId={patient.patientId} onDone={resetKiosk} />}
+    {stage === 'done' && patient && <PatientCheckInComplete language={language} patientId={patient.patientId} patient={patient} onDone={resetKiosk} />}
     <footer className="patient-footer"><span>{t.footer}</span><span>{t.help}</span></footer>
   </main>;
 }
