@@ -36,6 +36,7 @@ def next_conversation_turn(payload: ConversationRequest):
         mode=result.mode,
         reply=result.reply,
         followUpQuestion=result.follow_up_question,
+        followUpField=result.follow_up_field,
         urgent=result.urgent,
         urgentMessage=result.urgent_message,
     )

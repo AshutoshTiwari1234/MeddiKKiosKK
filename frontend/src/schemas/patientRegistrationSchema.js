@@ -12,6 +12,7 @@ export const patientRegistrationSchema = z.object({
   phone,
   email: z.union([z.literal(''), z.string().trim().email('Enter a valid email address.').max(254)]),
   preferredLanguage: z.enum(['en', 'hi', 'other']),
+  department: z.string().trim().max(100).optional().default('General Medicine'),
   emergencyContact: z.object({
     name: z.string().trim().max(100),
     relationship: z.string().trim().max(50),

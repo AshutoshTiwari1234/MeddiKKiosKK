@@ -17,6 +17,7 @@ import './review-badges.css';
 import './review-history.css';
 import './patient-consent.css';
 import './consent-history.css';
+import './kiosk-enhancements.css';
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>

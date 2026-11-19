@@ -55,7 +55,8 @@ async function uploadPatientDocument(request, response) {
     document.extractedText = result.text;
     document.extractionCandidates = result.candidates || {};
   } catch (error) {
-    document.ocrStatus = error.statusCode === 503 ? 'unavailable' : 'failed';
+    const isUnavailable = error.statusCode === 503 || error.code === 'ECONNREFUSED' || error.cause?.code === 'ECONNREFUSED' || /fetch failed/i.test(error.message);
+    document.ocrStatus = isUnavailable ? 'unavailable' : 'failed';
     document.ocrMessage = String(error.message || 'OCR extraction failed.').slice(0, 500);
   }
   await document.save();

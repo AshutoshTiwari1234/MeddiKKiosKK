@@ -28,6 +28,7 @@ const registrationSchema = z.object({
   phone: optionalPhone,
   email: z.union([z.literal(''), z.string().trim().email().max(254)]).default(''),
   preferredLanguage: z.enum(['en', 'hi', 'other']).default('en'),
+  department: z.string().trim().max(100).optional().default('General Medicine'),
   emergencyContact: z.object({
     name: z.string().trim().max(100).optional().default(''),
     relationship: z.string().trim().max(50).optional().default(''),

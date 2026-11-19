@@ -20,7 +20,7 @@ const CASE_FIELDS = [
 const VERIFIED_HISTORY_FIELDS = CASE_FIELDS;
 
 async function registerPatient(request, response) {
-  const { consent, dateOfBirth, abhaId, ...details } = request.validatedBody;
+  const { consent, dateOfBirth, abhaId, department = 'General Medicine', ...details } = request.validatedBody;
   let abhaStatus = 'unverified';
   let abhaVerifiedAt = null;
   let abhaAuthMethods = [];
@@ -37,8 +37,27 @@ async function registerPatient(request, response) {
   }
 
   const intakeToken = crypto.randomBytes(32).toString('hex');
+
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+  const todayCount = await Patient.countDocuments({ createdAt: { $gte: todayStart } });
+  const tokenNum = 101 + todayCount;
+  const prefixMap = {
+    'Ayurveda / AYUSH': { prefix: 'AY', room: 'Room 3 (AYUSH OPD)' },
+    'General Medicine': { prefix: 'GM', room: 'Room 1 (General OPD)' },
+    'Pediatrics': { prefix: 'PED', room: 'Room 2 (Pediatrics)' },
+    'Orthopedics': { prefix: 'ORT', room: 'Room 4 (Orthopedics)' },
+    'Cardiology': { prefix: 'CARD', room: 'Room 5 (Cardiology)' },
+    'Dermatology': { prefix: 'DERM', room: 'Room 6 (Dermatology)' },
+  };
+  const { prefix, room } = prefixMap[department] || { prefix: 'OPD', room: 'Room 1 (General OPD)' };
+  const queueToken = `${prefix}-${tokenNum}`;
+
   const patient = await Patient.create({
     ...details,
+    department,
+    queueToken,
+    roomNumber: room,
     abhaId: normalizedAbha,
     abhaStatus,
     abhaVerifiedAt,
@@ -58,6 +77,8 @@ async function registerPatient(request, response) {
     details: {
       hasAbhaId: Boolean(normalizedAbha),
       abhaStatus,
+      department,
+      queueToken,
     },
   });
   response.status(201).json({ patient: patient.toJSON(), intakeToken });
@@ -187,7 +208,7 @@ async function listPatients(request, response, filters = request.query) {
   }
 
   const [patients, total] = await Promise.all([
-    Patient.find(filter).select('patientId fullName dateOfBirth gender phone preferredLanguage caseStatus clinicalReview.status createdAt caseHistoryUpdatedAt')
+    Patient.find(filter).select('patientId fullName dateOfBirth gender phone preferredLanguage department queueToken roomNumber callStatus caseStatus clinicalReview.status createdAt caseHistoryUpdatedAt vitals')
       .sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit).lean(),
     Patient.countDocuments(filter),
   ]);

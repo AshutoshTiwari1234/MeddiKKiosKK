@@ -22,7 +22,16 @@ export default function AppSidebar() {
     <nav className="side-nav">{mainLinks.map(({ label, icon: Icon, href }) => <NavLink key={label} to={href} end={href === '/'} className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} title={label}><Icon size={18} strokeWidth={1.8} /><span>{label}</span></NavLink>)}</nav>
     {user?.role === 'administrator' && <><div className="nav-section-label tools-label">ADMINISTRATION</div><nav className="side-nav"><NavLink to="/team" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}><UserRoundCog size={18} strokeWidth={1.8} /><span>Staff accounts</span></NavLink></nav></>}
     <div className="nav-section-label tools-label">CARE TOOLS</div>
-    <nav className="side-nav"><div className="nav-link nav-link-muted" aria-disabled="true"><BookOpenCheck size={18} strokeWidth={1.8} /><span>Clinical summaries</span></div><div className="nav-link nav-link-muted" aria-disabled="true"><Activity size={18} strokeWidth={1.8} /><span>Care insights</span></div></nav>
+    <nav className="side-nav">
+      <NavLink to="/display" target="_blank" rel="noopener noreferrer" className="nav-link" title="Open Waiting Hall TV Display">
+        <Activity size={18} strokeWidth={1.8} />
+        <span>Waiting Hall Display</span>
+      </NavLink>
+      <NavLink to="/patient" target="_blank" rel="noopener noreferrer" className="nav-link" title="Open Patient Intake Kiosk">
+        <HeartPulse size={18} strokeWidth={1.8} />
+        <span>Patient Kiosk Mode</span>
+      </NavLink>
+    </nav>
     <div className="sidebar-spacer" />
     <div className="sidebar-help"><span className="help-icon"><CircleHelp size={17} /></span><b>Need a hand?</b><small>Our team is here to help.</small><span className="support-note">Ask your hospital administrator.</span></div>
     <NavLink to="/account" className={({ isActive }) => `nav-link settings-link ${isActive ? 'active' : ''}`} title="Account and security"><Settings2 size={18} /><span>Account &amp; security</span></NavLink>

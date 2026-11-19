@@ -20,5 +20,6 @@ class ConversationResponse(BaseModel):
     mode: Literal['demo', 'llm']
     reply: str
     followUpQuestion: str | None = None
+    followUpField: Literal['onset', 'duration', 'location', 'character', 'timing', 'severity', 'aggravatingFactors', 'relievingFactors', 'associatedSymptoms'] | None = None
     urgent: bool = False
     urgentMessage: str | None = None

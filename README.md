@@ -61,6 +61,19 @@ The dashboards use database-backed patient records. Development should use synth
 - Doctors and administrators can download a FHIR R4 collection Bundle after intake is complete and a clinician has approved the summary. It contains a Patient resource and a DocumentReference for the approved note, and the export is audit logged. The FHIR resource structure follows the HL7 FHIR R4 specification.
 - This release exports a local FHIR file only. ABDM sandbox authentication, consent-manager flows, profiles, and network exchange still require a registered sandbox client and deployment configuration; no patient data is sent to an external health network by this prototype.
 
+## Phase 8: Smart Kiosk Experience & Complete End-to-End Flow
+
+- **Interactive Body Map Selector**: When specifying symptom locations, patients can tap an interactive anatomical body silhouette with hotspot zones (Head, Throat, Chest, Abdomen, Arms, Spine, Knees, Skin) or pick detailed sub-location chips in English or Hindi.
+- **Wong-Baker Animated Pain Scale**: A 0–10 visual scale with 6 color-coded expressive face emojis (😄 to 😭), bilingual descriptions, and smooth gradient slider.
+- **Symptom Quick Suggestions & Voice Visualizer**: Quick-entry symptom pills for chief complaints, and a pulsating audio waveform that provides reassuring visual feedback during microphone speech input and question read-out.
+- **1-Click Evaluator Demo Presets**: Pre-configured real-world case templates (🌿 AYUSH Amavata joint stiffness, ⚡ Acute Migraine & Acidity, 🩺 Seasonal Bronchial Allergy) with 1-click auto-fill for instant hackathon demonstrations.
+- **Digital OPD Token Slip / Printable Pass**: Generates an official OPD Pass upon check-in completion, displaying large queue tokens (e.g. `AY-104`), assigned consultation cabin/room, estimated wait time, scannable QR verification code, 45-second auto reset timer, and print support (`window.print()`).
+- **Waiting Hall Public TV Display (`/display`)**: Dedicated full-screen waiting room TV monitor board showing real-time called tokens, upcoming queue status, audio voice chime announcements, and rotating AYUSH wellness tips.
+- **Objective Triage Vitals**: Record blood pressure, pulse rate, SpO2, temperature, weight, and height, with automatic BMI calculation and clinical hypertension/BMI classification badges.
+- **Prescription & Treatment Builder**: Clinicians can prescribe medications with dosage, frequency, and food instructions, add AYUSH Pathya (Dietary regimen) and Apathya (Strict restrictions), and generate/print official hospital prescription slips with doctor signature lines and Rx letterhead.
+- **Interactive Ayurveda Tri-Dosha Radar**: Visual balance gauges for Vata, Pitta, and Kapha energies that update in real time based on selected Prakriti and Vikriti constitutions.
+- **Instant Demo Database Seed**: Run `npm run seed:demo` in `backend` to populate active patients with realistic vitals, case histories, and prescriptions.
+
 Before using Phase 2, configure MongoDB and a private JWT secret. From the project root in PowerShell:
 
 ```powershell
