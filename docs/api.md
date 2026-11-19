@@ -71,6 +71,25 @@ A clinic session is one doctor's OPD shift in one cabin on one day. Times are lo
 - `PATCH /api/sessions/:sessionId/status` accepts `{ "status": "active" | "completed" | "cancelled", "reason"? }`. Allowed changes: scheduled → active or cancelled, active → completed or cancelled.
 - Creating or moving a session returns `409` if the doctor already has an overlapping session, or if the cabin is already allocated at that time (cabin names are compared ignoring case and extra spaces). Back-to-back sessions are allowed, and cancelled sessions free their slot.
 
+## Follow-up appointments
+
+A follow-up takes one slot inside one of the doctor's clinic sessions. The slot length is the session's `slotMinutes`, and start times must fall on the session's slot grid (for a 09:00 session with 15-minute slots: 09:00, 09:15, …).
+
+- `POST /api/appointments` (administrator or doctor) accepts `{ patientId, doctorId?, date, startTime, reason?, notes? }`. Doctors may omit `doctorId` to book with themselves.
+- `GET /api/appointments/availability?doctorId=&date=` lists the doctor's sessions that day with every slot marked `available` or not (`booked`, `past` or `session_full`).
+- `GET /api/appointments` filters by `date` or `from`/`to` (default today), `doctorId`, `patientId` and `status`. With only `patientId`, it returns that patient's full follow-up history.
+- `GET /api/appointments/:appointmentId` returns one appointment.
+- `PATCH /api/appointments/:appointmentId/reschedule` accepts `{ date, startTime, doctorId? }` and keeps the previous times in `rescheduledFrom`.
+- `PATCH /api/appointments/:appointmentId/status` accepts `{ "status": "completed" | "cancelled" | "no_show", "reason"? }`. Only booked appointments can change, and completed or no-show only once the appointment time has started.
+
+Double bookings are rejected with `409`:
+- The doctor already has a booked appointment in that slot.
+- The patient already has a follow-up in the same clinic session, or another appointment at the same time.
+- The session has reached `maxPatients`.
+- The time is not covered by a scheduled or active session for that doctor.
+
+Unique database indexes on booked appointments (doctor + start time, patient + session) also stop two requests that arrive at the same moment from both getting the slot. A clinic session with booked follow-ups cannot be cancelled, or moved so that a booking falls outside it, until those bookings are rescheduled or cancelled.
+
 ## Emergency alerts
 
 - `GET /api/alerts` returns open and acknowledged human-assessment alerts to authenticated staff.

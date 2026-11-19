@@ -239,3 +239,121 @@ test('clinic sessions manage doctor shifts and cabin allocation without overlaps
   const missing = await call('receptionist', 'GET', '/sessions/507f1f77bcf86cd799439011');
   assert.equal(missing.status, 404);
 });
+
+test('follow-up appointments prevent double bookings', async () => {
+  const FollowUpAppointment = require('../../models/FollowUpAppointment');
+  await FollowUpAppointment.init();
+  const date = futureDate(3);
+  const doctorId = String(staff.doctor._id);
+  const doctor2Id = String(staff.doctor2._id);
+  const [alice, bala, chitra] = await Patient.create([
+    { fullName: 'Alice Follow-up', consent: { caseTaking: true } },
+    { fullName: 'Bala Follow-up', consent: { caseTaking: true } },
+    { fullName: 'Chitra Follow-up', consent: { caseTaking: true } },
+  ]);
+
+  // No session yet: booking is refused.
+  const noSession = await call('doctor', 'POST', '/appointments', { patientId: alice.patientId, date, startTime: '10:00' });
+  assert.equal(noSession.status, 409);
+  assert.match(noSession.body.error.message, /no OPD session/);
+
+  const session = await call('doctor', 'POST', '/sessions', { date, shift: 'custom', startTime: '10:00', endTime: '11:00', cabin: 'Cabin 7', slotMinutes: 15, maxPatients: 3 });
+  assert.equal(session.status, 201);
+  await call('doctor2', 'POST', '/sessions', { date, shift: 'custom', startTime: '10:00', endTime: '12:00', cabin: 'Cabin 8' });
+
+  const receptionistBooking = await call('receptionist', 'POST', '/appointments', { patientId: alice.patientId, doctorId, date, startTime: '10:00' });
+  assert.equal(receptionistBooking.status, 403);
+
+  const booked = await call('doctor', 'POST', '/appointments', { patientId: alice.patientId, date, startTime: '10:00', reason: 'Review BP after medication' });
+  assert.equal(booked.status, 201);
+  assert.equal(booked.body.appointment.startTime, '10:00');
+  assert.equal(booked.body.appointment.endTime, '10:15');
+  assert.equal(booked.body.appointment.status, 'booked');
+  assert.equal(booked.body.appointment.doctor.name, 'Dr. Meera Rao');
+  assert.equal(booked.body.appointment.session.cabin, 'Cabin 7');
+
+  // Same doctor, same slot, different patient.
+  const doctorDouble = await call('administrator', 'POST', '/appointments', { patientId: bala.patientId, doctorId, date, startTime: '10:00' });
+  assert.equal(doctorDouble.status, 409);
+  assert.match(doctorDouble.body.error.message, /already booked/);
+
+  // Same patient, second slot in the same session.
+  const patientSameSession = await call('doctor', 'POST', '/appointments', { patientId: alice.patientId, date, startTime: '10:30' });
+  assert.equal(patientSameSession.status, 409);
+  assert.match(patientSameSession.body.error.message, /already has a follow-up booked in this clinic session/);
+
+  // Same patient, same time with another doctor.
+  const patientElsewhere = await call('doctor2', 'POST', '/appointments', { patientId: alice.patientId, date, startTime: '10:00' });
+  assert.equal(patientElsewhere.status, 409);
+  assert.match(patientElsewhere.body.error.message, /another appointment at that time/);
+
+  // Off-grid, out-of-session and unknown-patient requests.
+  const offGrid = await call('doctor', 'POST', '/appointments', { patientId: bala.patientId, date, startTime: '10:05' });
+  assert.equal(offGrid.status, 400);
+  const outside = await call('doctor', 'POST', '/appointments', { patientId: bala.patientId, date, startTime: '11:00' });
+  assert.equal(outside.status, 409);
+  const unknownPatient = await call('doctor', 'POST', '/appointments', { patientId: 'MK-FFFFFFFFFF', date, startTime: '10:15' });
+  assert.equal(unknownPatient.status, 404);
+
+  // Two requests racing for the same free slot: exactly one wins.
+  const race = await Promise.all([
+    call('doctor', 'POST', '/appointments', { patientId: bala.patientId, date, startTime: '10:15' }),
+    call('administrator', 'POST', '/appointments', { patientId: chitra.patientId, doctorId, date, startTime: '10:15' }),
+  ]);
+  assert.deepEqual(race.map((result) => result.status).sort(), [201, 409]);
+  const loserPatient = race[0].status === 409 ? bala : chitra;
+
+  // Availability reflects bookings.
+  const availability = await call('receptionist', 'GET', `/appointments/availability?doctorId=${doctorId}&date=${date}`);
+  assert.equal(availability.status, 200);
+  const slots = availability.body.sessions[0].slots;
+  assert.deepEqual(slots.map((slot) => slot.startTime), ['10:00', '10:15', '10:30', '10:45']);
+  assert.deepEqual(slots.map((slot) => slot.available), [false, false, true, true]);
+  assert.equal(availability.body.sessions[0].booked, 2);
+
+  // Capacity: the session allows three bookings.
+  const third = await call('doctor', 'POST', '/appointments', { patientId: loserPatient.patientId, date, startTime: '10:30' });
+  assert.equal(third.status, 201);
+  const extraPatient = await Patient.create({ fullName: 'Overflow Patient', consent: { caseTaking: true } });
+  const full = await call('doctor', 'POST', '/appointments', { patientId: extraPatient.patientId, date, startTime: '10:45' });
+  assert.equal(full.status, 409);
+  assert.match(full.body.error.message, /fully booked/);
+
+  // A session with bookings cannot be cancelled or shrunk past them.
+  const cancelSession = await call('doctor', 'PATCH', `/sessions/${session.body.session._id}/status`, { status: 'cancelled' });
+  assert.equal(cancelSession.status, 409);
+  const shrink = await call('doctor', 'PATCH', `/sessions/${session.body.session._id}`, { endTime: '10:30' });
+  assert.equal(shrink.status, 409);
+
+  // Reschedule into a taken slot fails; into a free slot with another doctor works.
+  const appointmentId = booked.body.appointment._id;
+  const rescheduleClash = await call('doctor', 'PATCH', `/appointments/${appointmentId}/reschedule`, { date, startTime: '10:30' });
+  assert.equal(rescheduleClash.status, 409);
+  const rescheduled = await call('doctor', 'PATCH', `/appointments/${appointmentId}/reschedule`, { date, startTime: '11:00', doctorId: doctor2Id });
+  assert.equal(rescheduled.status, 200);
+  assert.equal(rescheduled.body.appointment.doctor.name, 'Dr. Arjun Das');
+  assert.equal(rescheduled.body.appointment.rescheduledFrom.length, 1);
+
+  // The freed 10:00 slot can now be booked.
+  const freed = await call('doctor', 'POST', '/appointments', { patientId: extraPatient.patientId, date, startTime: '10:00' });
+  assert.equal(freed.status, 201);
+
+  // Status changes: future appointments can be cancelled but not completed.
+  const completeEarly = await call('doctor', 'PATCH', `/appointments/${freed.body.appointment._id}/status`, { status: 'completed' });
+  assert.equal(completeEarly.status, 409);
+  const cancelled = await call('doctor', 'PATCH', `/appointments/${freed.body.appointment._id}/status`, { status: 'cancelled', reason: 'Patient called to cancel' });
+  assert.equal(cancelled.status, 200);
+  assert.equal(cancelled.body.appointment.status, 'cancelled');
+  const cancelAgain = await call('doctor', 'PATCH', `/appointments/${freed.body.appointment._id}/status`, { status: 'cancelled' });
+  assert.equal(cancelAgain.status, 409);
+  const rebookAfterCancel = await call('doctor', 'POST', '/appointments', { patientId: extraPatient.patientId, date, startTime: '10:00' });
+  assert.equal(rebookAfterCancel.status, 201);
+
+  // Listing by patient and by day.
+  const alicesAppointments = await call('receptionist', 'GET', `/appointments?patientId=${alice.patientId}`);
+  assert.equal(alicesAppointments.status, 200);
+  assert.equal(alicesAppointments.body.appointments.length, 1);
+  assert.equal(alicesAppointments.body.appointments[0].startTime, '11:00');
+  const dayList = await call('receptionist', 'GET', `/appointments?date=${date}&doctorId=${doctorId}&status=booked`);
+  assert.deepEqual(dayList.body.appointments.map((appointment) => appointment.startTime), ['10:00', '10:15', '10:30']);
+});

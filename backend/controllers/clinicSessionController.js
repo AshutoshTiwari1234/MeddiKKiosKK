@@ -1,9 +1,10 @@
 const mongoose = require('mongoose');
 const ClinicSession = require('../models/ClinicSession');
+const FollowUpAppointment = require('../models/FollowUpAppointment');
 const User = require('../models/User');
 const AppError = require('../utils/AppError');
 const { recordAudit } = require('../services/auditService');
-const { SHIFT_PRESETS, minutesToTime, timeToMinutes } = require('../utils/clinicTime');
+const { SHIFT_PRESETS, atMinutes, minutesToTime, timeToMinutes } = require('../utils/clinicTime');
 const { formatLocalDate, parseLocalDate, resolveDayRange, startOfDay } = require('../utils/dateRange');
 
 const DOCTOR_FIELDS = 'name email department role';
@@ -214,6 +215,18 @@ async function updateSession(request, response) {
 
   await assertNoConflicts({ date, doctor: session.doctor, cabinKey, startMinute, endMinute, excludeId: session._id });
 
+  // Booked follow-ups must still fit inside the session after it moves.
+  const newStart = atMinutes(date, startMinute);
+  const newEnd = atMinutes(date, endMinute);
+  const stranded = await FollowUpAppointment.countDocuments({
+    session: session._id,
+    status: 'booked',
+    $or: [{ startAt: { $lt: newStart } }, { endAt: { $gt: newEnd } }],
+  });
+  if (stranded) {
+    throw new AppError(`${stranded} booked follow-up appointment${stranded === 1 ? '' : 's'} would fall outside the new session time. Reschedule ${stranded === 1 ? 'it' : 'them'} first.`, 409);
+  }
+
   Object.assign(session, {
     date,
     shift,
@@ -245,6 +258,10 @@ async function updateSessionStatus(request, response) {
   if (status === 'active') session.startedAt = now;
   if (status === 'completed') session.completedAt = now;
   if (status === 'cancelled') {
+    const booked = await FollowUpAppointment.countDocuments({ session: session._id, status: 'booked' });
+    if (booked) {
+      throw new AppError(`This session has ${booked} booked follow-up appointment${booked === 1 ? '' : 's'}. Reschedule or cancel ${booked === 1 ? 'it' : 'them'} before cancelling the session.`, 409);
+    }
     session.cancelledAt = now;
     session.cancelledBy = request.user._id;
     session.cancellationReason = reason;
