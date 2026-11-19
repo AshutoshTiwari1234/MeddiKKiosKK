@@ -1,5 +1,6 @@
-import { ArrowRight, CheckCircle2, Clock, Download, HeartPulse, MapPin, Printer, QrCode, RefreshCw, ShieldCheck, Sparkles } from 'lucide-react';
+import { ArrowRight, CheckCircle2, Clock, Download, HeartPulse, MapPin, Printer, QrCode, RefreshCw, ShieldCheck, Sparkles, Star } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import PatientFeedbackModal from './PatientFeedbackModal.jsx';
 
 // Generates an attractive stylized deterministic QR matrix SVG for the slip
 function SimpleQRCode({ text = 'MEDIKIOSK-TOKEN', size = 110 }) {
@@ -63,9 +64,11 @@ export default function DigitalTokenSlip({
   queueToken = 'OPD-101',
   roomNumber = 'Room 1 (General OPD)',
   onDone,
+  onSubmitRating,
 }) {
   const isHindi = language === 'hi';
   const [countdown, setCountdown] = useState(45);
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
   const now = new Date();
   const dateStr = new Intl.DateTimeFormat('en-IN', {
     day: 'numeric',
@@ -189,15 +192,27 @@ export default function DigitalTokenSlip({
       </div>
 
       {/* Slip Actions */}
-      <div className="token-slip-actions">
+      <div className="token-slip-actions patient-feedback-slip-actions">
         <button type="button" className="button button-secondary slip-action-btn" onClick={handlePrint}>
           <Printer size={16} /> {isHindi ? 'पर्ची प्रिंट करें' : 'Print OPD Pass'}
+        </button>
+
+        <button type="button" className="button button-secondary slip-action-btn" lang={isHindi ? 'hi' : 'en'} onClick={() => setFeedbackOpen(true)}>
+          <Star size={16} aria-hidden="true" /> {isHindi ? 'अपने अनुभव को रेटिंग दें' : 'Rate your experience'}
         </button>
 
         <button type="button" className="button button-primary slip-action-btn" onClick={onDone}>
           {isHindi ? 'समाप्त करें (अगला रोगी)' : 'Finish & Return Home'} <ArrowRight size={16} />
         </button>
       </div>
+
+      {feedbackOpen && (
+        <PatientFeedbackModal
+          language={language}
+          onClose={() => setFeedbackOpen(false)}
+          onSubmitRating={onSubmitRating}
+        />
+      )}
 
       <div className="token-reset-timer">
         <RefreshCw size={13} className="spin-slow" />
