@@ -80,104 +80,101 @@ export default function PatientCaseWizard({ language = 'en', patientId, token, d
   const startVoiceInput = async () => {
     if (listening) {
       recognitionRef.current?.stop();
+      setListening(false);
+      setVoicePreparing(false);
       return;
     }
     const localHost = ['localhost', '127.0.0.1'].includes(window.location.hostname);
     if (!window.isSecureContext && !localHost) {
-      setVoiceError(language === 'hi' ? 'वॉइस इनपुट के लिए सुरक्षित HTTPS कनेक्शन ज़रूरी है।' : 'Voice input requires a secure HTTPS connection.');
+      setVoiceError(language === 'hi' ? 'वॉइस इनपुट के लिए सुरक्षित HTTPS या localhost कनेक्शन ज़रूरी है।' : 'Voice input requires a secure HTTPS or localhost connection.');
       return;
     }
-    const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!Recognition) {
-      setVoiceError(language === 'hi' ? 'इस ब्राउज़र में वॉइस इनपुट उपलब्ध नहीं है। Chrome या Edge में खोलें, या जवाब टाइप करें।' : 'Voice input is not supported by this browser. Open this page in Chrome or Edge, or type your answer.');
+    const SpeechRecognitionClass = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognitionClass) {
+      setVoiceError(language === 'hi' ? 'इस ब्राउज़र में वॉइस इनपुट समर्थित नहीं है। कृपया Google Chrome या Microsoft Edge का उपयोग करें।' : 'Voice input is not supported in this browser. Please open in Google Chrome or Microsoft Edge.');
       return;
     }
     setVoiceError('');
     setVoiceNotice('');
+    setVoicePreparing(true);
+
+    // Explicitly prompt and ensure microphone permission
+    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        stream.getTracks().forEach((track) => track.stop());
+      } catch (micError) {
+        setVoicePreparing(false);
+        if (micError.name === 'NotAllowedError' || micError.name === 'PermissionDeniedError') {
+          setVoiceError(language === 'hi' ? 'माइक्रोफ़ोन की अनुमति अस्वीकृत है। कृपया ब्राउज़र URL बार में माइक की अनुमति दें।' : 'Microphone permission was denied. Please allow microphone access in your browser address bar.');
+          return;
+        }
+      }
+    }
+
     let recognition;
-    try { recognition = new Recognition(); } catch (_error) {
-      setVoiceError(language === 'hi' ? 'माइक्रोफ़ोन शुरू नहीं हो सका। अनुमति जाँचें या जवाब टाइप करें।' : 'Could not start the microphone. Check its permission or type your answer.');
+    try {
+      recognition = new SpeechRecognitionClass();
+    } catch (_error) {
+      setVoicePreparing(false);
+      setVoiceError(language === 'hi' ? 'माइक्रोफ़ोन सेवा शुरू नहीं हो सकी।' : 'Could not initialize speech recognition.');
       return;
     }
+
     recognitionRef.current = recognition;
     recognition.lang = language === 'hi' ? 'hi-IN' : 'en-IN';
     recognition.interimResults = true;
-    recognition.continuous = false;
+    recognition.continuous = true;
     recognition.maxAlternatives = 1;
-    recognition.onstart = () => setListening(true);
-    recognition.onend = () => {
-      setListening(false);
-      if (recognitionRef.current === recognition) recognitionRef.current = null;
+
+    recognition.onstart = () => {
+      setListening(true);
+      setVoicePreparing(false);
+      setVoiceError('');
+      setVoiceNotice(language === 'hi' ? 'माइक्रोफ़ोन चालू है… बोलिए' : 'Listening… speak clearly now');
     };
-    recognition.onerror = (event) => {
-      setListening(false);
-        const messages = {
-          denied: language === 'hi' ? 'माइक्रोफ़ोन की अनुमति दें और पेज को HTTPS पर खोलें।' : 'Allow microphone access and open this page over HTTPS.',
-          noSpeech: language === 'hi' ? 'आवाज़ नहीं मिली। माइक्रोफ़ोन के पास बोलकर फिर कोशिश करें।' : 'No speech was detected. Check your microphone and speak after the listening indicator appears.',
-          network: language === 'hi' ? 'ब्राउज़र की ऑनलाइन वॉइस सेवा उपलब्ध नहीं है। इंटरनेट जाँचें या Chrome/Edge में फिर कोशिश करें।' : 'The browser’s online speech service is unavailable. Check your internet connection or try Chrome/Edge again.',
-          localUnavailable: language === 'hi' ? 'ऑफ़लाइन वॉइस पैक उपलब्ध नहीं है। इंटरनेट से भाषा पैक डाउनलोड करें या बाद में फिर कोशिश करें।' : 'The on-device voice pack is unavailable. Connect to the internet to download the language pack, then try again.',
-          capture: language === 'hi' ? 'माइक्रोफ़ोन उपलब्ध नहीं है या किसी अन्य ऐप में उपयोग हो रहा है।' : 'The microphone is unavailable or being used by another app.',
-          language: language === 'hi' ? 'इस भाषा के लिए वॉइस पहचान उपलब्ध नहीं है।' : 'Speech recognition is unavailable for this language.',
-          other: language === 'hi' ? 'आवाज़ पहचानी नहीं जा सकी। फिर कोशिश करें या जवाब टाइप करें।' : 'Speech could not be recognized. Try again or type your answer.',
-        };
-        const message = event.error === 'not-allowed' ? messages.denied
-          : event.error === 'service-not-allowed' ? messages.localUnavailable
-          : event.error === 'no-speech' ? messages.noSpeech
-            : event.error === 'network' ? messages.network
-              : event.error === 'audio-capture' ? messages.capture
-                : event.error === 'language-not-supported' ? messages.language : messages.other;
-        setVoiceError(message);
-    };
+
     recognition.onresult = (event) => {
-      const transcript = Array.from(event.results || []).map((result) => result[0]?.transcript || '').join(' ').trim();
-      if (transcript) setAnswers((current) => ({ ...current, [question.field]: transcript }));
-    };
-    const beginRecognition = () => {
-      try { recognition.start(); } catch (_error) {
-        setListening(false);
-        setVoiceError(language === 'hi' ? 'माइक्रोफ़ोन शुरू नहीं हो सका। अनुमति जाँचें या जवाब टाइप करें।' : 'Could not start the microphone. Check its permission or type your answer.');
+      let combined = '';
+      for (let i = 0; i < event.results.length; i++) {
+        combined += event.results[i][0].transcript + ' ';
+      }
+      const transcript = combined.trim();
+      if (transcript) {
+        setAnswers((current) => ({ ...current, [question.field]: transcript }));
       }
     };
 
-    if (typeof Recognition.available === 'function' && typeof Recognition.install === 'function' && 'processLocally' in recognition) {
-      setVoicePreparing(true);
-      const preferredLanguage = language === 'hi' ? 'hi-IN' : 'en-IN';
-      let availability = 'unavailable';
-      let localLanguage = preferredLanguage;
-      try {
-        availability = await Recognition.available({ langs: [preferredLanguage], processLocally: true });
-        if (availability === 'unavailable' && language === 'en') {
-          localLanguage = 'en-US';
-          availability = await Recognition.available({ langs: [localLanguage], processLocally: true });
-        }
-        if (availability === 'available') {
-          recognition.lang = localLanguage;
-          recognition.processLocally = true;
-          setVoiceNotice(language === 'hi' ? 'आवाज़ आपके डिवाइस पर पहचानी जाएगी।' : 'Speech will be recognized on this device.');
-          setVoicePreparing(false);
-          beginRecognition();
-          return;
-        }
-        if (availability === 'downloadable' || availability === 'downloading') {
-          const installed = await Recognition.install({ langs: [localLanguage], processLocally: true });
-          setVoicePreparing(false);
-          if (installed) setVoiceNotice(language === 'hi' ? 'ऑफ़लाइन भाषा पैक तैयार है। वॉइस इनपुट शुरू करने के लिए फिर से दबाएँ।' : 'The on-device language pack is ready. Press Speak answer again to begin.');
-          else setVoiceError(language === 'hi' ? 'ऑफ़लाइन भाषा पैक डाउनलोड नहीं हुआ। इंटरनेट जाँचकर फिर कोशिश करें।' : 'The on-device language pack could not be downloaded. Check your internet and try again.');
-          return;
-        }
-        if (availability === 'unavailable') {
-          setVoicePreparing(false);
-          setVoiceError(language === 'hi' ? 'इस भाषा के लिए डिवाइस पर वॉइस पहचान उपलब्ध नहीं है। Chrome को अपडेट करें या जवाब टाइप करें।' : 'On-device recognition is unavailable for this language in this browser. Update Chrome or type your answer.');
-          return;
-        }
-      } catch (_error) {
-        setVoicePreparing(false);
-        setVoiceError(language === 'hi' ? 'डिवाइस पर वॉइस पैक तैयार नहीं हो सका। इंटरनेट जाँचें और फिर कोशिश करें।' : 'Could not prepare the on-device voice pack. Check your internet and try again.');
+    recognition.onerror = (event) => {
+      if (event.error === 'no-speech' || event.error === 'aborted') {
         return;
       }
+      setListening(false);
       setVoicePreparing(false);
+      const messages = {
+        'not-allowed': language === 'hi' ? 'माइक्रोफ़ोन की अनुमति दें और पेज को HTTPS पर खोलें।' : 'Allow microphone access in browser settings.',
+        'network': language === 'hi' ? 'स्पीच सेवा से संपर्क नहीं हो सका। इंटरनेट जाँचें या जवाब टाइप करें।' : 'Speech service connection error. Check your internet connection or type your answer.',
+        'audio-capture': language === 'hi' ? 'माइक्रोफ़ोन उपलब्ध नहीं है या किसी अन्य ऐप द्वारा उपयोग में है।' : 'Microphone is unavailable or in use by another app.',
+        'language-not-supported': language === 'hi' ? 'इस भाषा के लिए वॉइस पहचान उपलब्ध नहीं है।' : 'Speech recognition is not supported for this language.',
+      };
+      setVoiceError(messages[event.error] || (language === 'hi' ? 'आवाज़ पहचानी नहीं जा सकी। पुनः प्रयास करें या टाइप करें।' : `Speech error (${event.error}). Try again or type your answer.`));
+    };
+
+    recognition.onend = () => {
+      setListening(false);
+      setVoicePreparing(false);
+      if (recognitionRef.current === recognition) {
+        recognitionRef.current = null;
+      }
+    };
+
+    try {
+      recognition.start();
+    } catch (_error) {
+      setListening(false);
+      setVoicePreparing(false);
+      setVoiceError(language === 'hi' ? 'माइक्रोफ़ोन शुरू नहीं हो सका।' : 'Could not start microphone recording.');
     }
-    beginRecognition();
   };
 
   const readQuestion = () => {
@@ -414,7 +411,7 @@ export default function PatientCaseWizard({ language = 'en', patientId, token, d
       )}
 
       {/* Voice actions & Audio Waveform */}
-      {question.kind !== 'scale' && question.field !== 'location' && (
+      {question.kind !== 'scale' && (
         <div className="voice-actions">
           <button type="button" className="voice-button" onClick={startVoiceInput} disabled={saving || voicePreparing}>
             <Mic size={15} /> {voicePreparing ? (language === 'hi' ? 'आवाज़ तैयार हो रही है…' : 'Preparing voice…') : listening ? (language === 'hi' ? 'सुनना रोकें' : 'Stop listening') : (language === 'hi' ? 'बोलकर बताएं' : 'Speak answer')}
