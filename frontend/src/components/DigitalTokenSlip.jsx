@@ -1,5 +1,6 @@
 import { ArrowRight, CheckCircle2, Clock, Download, HeartPulse, MapPin, Printer, QrCode, RefreshCw, ShieldCheck, Sparkles, Star } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { createFeedbackRetryKey, submitPatientFeedback } from '../services/patientFeedback.js';
 import PatientFeedbackModal from './PatientFeedbackModal.jsx';
 
 // Generates an attractive stylized deterministic QR matrix SVG for the slip
@@ -69,6 +70,7 @@ export default function DigitalTokenSlip({
   const isHindi = language === 'hi';
   const [countdown, setCountdown] = useState(45);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
+  const feedbackRetryKey = useRef(null);
   const now = new Date();
   const dateStr = new Intl.DateTimeFormat('en-IN', {
     day: 'numeric',
@@ -90,6 +92,11 @@ export default function DigitalTokenSlip({
     }, 1000);
     return () => clearInterval(timer);
   }, [onDone]);
+
+  const handleSubmitRating = (rating) => {
+    feedbackRetryKey.current ??= createFeedbackRetryKey();
+    return submitPatientFeedback(rating, feedbackRetryKey.current);
+  };
 
   const handlePrint = () => {
     window.print();
@@ -210,7 +217,7 @@ export default function DigitalTokenSlip({
         <PatientFeedbackModal
           language={language}
           onClose={() => setFeedbackOpen(false)}
-          onSubmitRating={onSubmitRating}
+          onSubmitRating={onSubmitRating ?? handleSubmitRating}
         />
       )}
 

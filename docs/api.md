@@ -56,6 +56,12 @@ The first administrator is created through the interactive `npm run create-admin
 
 Every patient list/detail read and kiosk write is audit logged. The list response includes a clinical review status but no clinical history. Patient responses remain unverified until a clinician reviews them. These endpoints do not produce diagnoses or treatment recommendations.
 
+## Kiosk feedback
+
+- `POST /api/feedback` accepts only `{ "rating": 1 }`, where the rating is an integer from 1 to 5. It accepts anonymous survey responses independently of intake status and does not use session credentials or patient identifiers. Requests are limited to 30 per 15 minutes per client IP.
+- The kiosk sends a random `Idempotency-Key` header (32 lowercase hexadecimal characters) for the life of the token slip. The first submission returns `201`. Repeating that key returns `200` and preserves the first accepted rating, even if requests overlap. Other clients may omit the header, in which case each accepted request creates a response.
+- `GET /api/feedback/average` requires the `administrator` role and returns `{ "averageRating": 4.25, "count": 4 }` across all responses. An empty survey returns `{ "averageRating": null, "count": 0 }`.
+
 ## AI service
 
 The Python service exposes `GET /health`, `POST /api/v1/conversation/next`, `POST /api/v1/ocr/extract`, and `POST /api/v1/summary/generate`. OCR extracts embedded PDF text and uses Tesseract for images/scanned pages. The health response reports whether the Tesseract executable is available. OCR candidates remain unverified. An optional OpenAI-compatible adapter is disabled by default and can only be used for summary generation when patient AI-assistance consent is recorded. Bind the service to loopback during development and a private network in deployment.
