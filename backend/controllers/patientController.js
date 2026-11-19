@@ -102,12 +102,12 @@ async function getConversationReply(request, response) {
     intakeExpiresAt: { $gt: new Date() },
     'consent.caseTaking': true,
     caseStatus: { $ne: 'completed' },
-  }).select('+intakeCredentialHash +intakeExpiresAt consent.aiAssistance');
+  }).select('+intakeCredentialHash +intakeExpiresAt consent.aiAssistance patientId');
   if (!patient) throw new AppError('This check-in session has expired. Please ask reception for help.', 401);
 
   if (hasUrgentPhrase(request.validatedBody.answer)) {
     const result = urgentReply(request.validatedBody.language);
-    const existingAlert = await EmergencyAlert.exists({ patient: patient._id, status: { $in: ['open', 'acknowledged'] } });
+    const existingAlert = await EmergencyAlert.exists({ patient: patient._id, status: { $in: ['open', 'acknowledged', 'escalated'] } });
     if (!existingAlert) await EmergencyAlert.create({ patient: patient._id, patientId: patient.patientId, source: 'intake_phrase' });
     await recordAudit(request, { action: 'patient.emergency_alert.create', resourceType: 'patient', resourceId: patient.patientId });
     return response.json(result);
@@ -124,7 +124,7 @@ async function getConversationReply(request, response) {
 
   const result = await requestConversation(request.validatedBody);
   if (result.urgent) {
-    const existingAlert = await EmergencyAlert.exists({ patient: patient._id, status: { $in: ['open', 'acknowledged'] } });
+    const existingAlert = await EmergencyAlert.exists({ patient: patient._id, status: { $in: ['open', 'acknowledged', 'escalated'] } });
     if (!existingAlert) await EmergencyAlert.create({ patient: patient._id, patientId: patient.patientId, source: 'intake_phrase' });
   }
   await recordAudit(request, { action: 'patient.ai_assistance.prompt', resourceType: 'patient', resourceId: patient.patientId });
