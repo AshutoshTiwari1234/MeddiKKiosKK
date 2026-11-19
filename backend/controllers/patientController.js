@@ -324,8 +324,18 @@ async function updatePatientPrescription(request, response) {
 async function callPatientToken(request, response) {
   const patient = await Patient.findOne({ patientId: request.params.patientId });
   if (!patient) throw new AppError('Patient record not found.', 404);
-  const { status = 'called' } = request.body || {};
+  const { status } = request.validatedBody;
+  const now = new Date();
   patient.callStatus = status;
+  if (status === 'called' && !patient.calledAt) patient.calledAt = now;
+  if (status === 'in_consultation') {
+    if (!patient.calledAt) patient.calledAt = now;
+    if (!patient.consultationStartedAt) patient.consultationStartedAt = now;
+  }
+  if (status === 'done') {
+    if (!patient.calledAt) patient.calledAt = now;
+    patient.consultationEndedAt = now;
+  }
   await patient.save();
   await recordAudit(request, { action: `patient.call_status.${status}`, resourceType: 'patient', resourceId: patient.patientId });
   response.json({ patientId: patient.patientId, queueToken: patient.queueToken, callStatus: patient.callStatus, roomNumber: patient.roomNumber });

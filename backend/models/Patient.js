@@ -167,6 +167,9 @@ const patientSchema = new mongoose.Schema({
   queueToken: { type: String, trim: true, maxlength: 20, default: '' },
   roomNumber: { type: String, trim: true, maxlength: 50, default: 'Room 1' },
   callStatus: { type: String, enum: ['waiting', 'called', 'in_consultation', 'done'], default: 'waiting' },
+  calledAt: { type: Date, default: null },
+  consultationStartedAt: { type: Date, default: null },
+  consultationEndedAt: { type: Date, default: null },
   emergencyContact: { type: emergencyContactSchema, default: () => ({}) },
   abhaId: { type: String, trim: true, maxlength: 32, default: '', select: false },
   consent: { type: consentSchema, default: () => ({}) },
@@ -189,6 +192,7 @@ const patientSchema = new mongoose.Schema({
 patientSchema.index({ fullName: 1 });
 patientSchema.index({ phone: 1 }, { sparse: true });
 patientSchema.index({ createdAt: -1 });
+patientSchema.index({ createdAt: 1, department: 1 });
 
 patientSchema.set('toJSON', {
   transform(_document, value) {

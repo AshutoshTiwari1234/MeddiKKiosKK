@@ -9,6 +9,7 @@ const authRoutes = require('./routes/authRoutes');
 const patientRoutes = require('./routes/patientRoutes');
 const userRoutes = require('./routes/userRoutes');
 const alertRoutes = require('./routes/alertRoutes');
+const analyticsRoutes = require('./routes/analyticsRoutes');
 const { connectDatabase } = require('./config/database');
 const AppError = require('./utils/AppError');
 const { jwtSecret } = require('./utils/auth');
@@ -56,6 +57,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/patients', patientRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/alerts', alertRoutes);
+app.use('/api/analytics', analyticsRoutes);
 
 app.use('/api', (_request, response) => {
   response.status(404).json({ error: { message: 'API route not found.' } });

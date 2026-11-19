@@ -51,6 +51,14 @@ The first administrator is created through the interactive `npm run create-admin
 - `PATCH /api/patients/:patientId/summary` accepts `{ "text", "status": "draft" | "approved" }`; approval requires completed intake. Previous summary versions are retained.
 - `GET /api/patients/:patientId/fhir-r4` is restricted to doctors and administrators. It returns a downloadable FHIR R4 `Bundle` of type `collection` containing a `Patient` and a `DocumentReference` for the approved clinical summary. Intake must be complete and the summary approved. The response is audit logged and is not sent to an external server.
 
+## OPD analytics
+
+- `GET /api/analytics/opd?from=YYYY-MM-DD&to=YYYY-MM-DD&department=` requires an authenticated staff account. Both dates are optional (default: today) and the range may cover up to 366 days. It returns:
+  - `overview`: `totalPatients`, `patientsCalled`, `averageWaitMinutes`, `maxWaitMinutes`, `averageConsultationMinutes`, `casesCompleted`, `reviewsApproved`, counts `byStatus`, and the `peakHour`.
+  - `departments`: one row per department with `totalPatients`, `sharePercent`, average waiting and consultation time, and counts by status.
+  - `hourly` and `daily` check-in counts.
+- Waiting time is measured from check-in to the first time the patient is called. `POST /api/patients/:patientId/call` accepts `{ "status": "waiting" | "called" | "in_consultation" | "done" }` (default `called`) and records `calledAt`, `consultationStartedAt` and `consultationEndedAt`. Patients without a call timestamp are left out of the averages.
+
 ## Emergency alerts
 
 - `GET /api/alerts` returns open and acknowledged human-assessment alerts to authenticated staff.

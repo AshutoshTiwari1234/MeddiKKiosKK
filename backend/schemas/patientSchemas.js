@@ -140,6 +140,10 @@ const vitalsInputSchema = z.object({
   height: z.number().min(20).max(300).nullable().optional(),
 }).strict();
 
+const callStatusSchema = z.preprocess((value) => value ?? {}, z.object({
+  status: z.enum(['waiting', 'called', 'in_consultation', 'done']).default('called'),
+}).strict());
+
 const medicationInputSchema = z.object({
   name: z.string().trim().min(1).max(150),
   dosage: z.string().trim().max(100).optional().default(''),
@@ -172,4 +176,5 @@ module.exports = {
   prescriptionInputSchema,
   registrationSchema,
   vitalsInputSchema,
+  callStatusSchema,
 };

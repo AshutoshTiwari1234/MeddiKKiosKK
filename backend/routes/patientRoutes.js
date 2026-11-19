@@ -10,7 +10,7 @@ const { uploadDocument } = require('../middleware/documentUpload');
 const requireDatabase = require('../middleware/requireDatabase');
 const requireIntakeToken = require('../middleware/requireIntakeToken');
 const validate = require('../middleware/validate');
-const { ayurvedaAssessmentSchema, caseHistoryPatchSchema, clinicalReviewSchema, clinicalSummarySchema, consentUpdateSchema, conversationSchema, documentReviewSchema, patientSearchSchema, prescriptionInputSchema, registrationSchema, vitalsInputSchema } = require('../schemas/patientSchemas');
+const { ayurvedaAssessmentSchema, callStatusSchema, caseHistoryPatchSchema, clinicalReviewSchema, clinicalSummarySchema, consentUpdateSchema, conversationSchema, documentReviewSchema, patientSearchSchema, prescriptionInputSchema, registrationSchema, vitalsInputSchema } = require('../schemas/patientSchemas');
 
 const router = express.Router();
 const registrationLimiter = rateLimit({ windowMs: 60 * 60 * 1000, limit: 20, standardHeaders: 'draft-8', legacyHeaders: false });
@@ -27,7 +27,7 @@ router.patch('/intake/case-history', requireIntakeToken, validate(caseHistoryPat
 router.use(authenticate, requireRole('administrator', 'doctor', 'receptionist'));
 router.get('/', listPatients);
 router.post('/search', validate(patientSearchSchema), searchPatients);
-router.post('/:patientId/call', callPatientToken);
+router.post('/:patientId/call', validate(callStatusSchema), callPatientToken);
 router.get('/:patientId/vitals/history', getVitalsHistory);
 router.patch('/:patientId/vitals', validate(vitalsInputSchema), updatePatientVitals);
 router.patch('/:patientId/prescription', requireRole('administrator', 'doctor'), validate(prescriptionInputSchema), updatePatientPrescription);
