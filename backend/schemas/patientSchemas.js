@@ -1,4 +1,20 @@
 const { z } = require('zod');
+const { validateAbhaId } = require('../services/abhaService');
+
+const abhaIdSchema = z.union([
+  z.literal(''),
+  z.string().trim().refine((val) => {
+    if (!val) return true;
+    const { valid } = validateAbhaId(val);
+    return valid;
+  }, {
+    message: 'Invalid ABHA ID format. Must be a 14-digit ABHA number (e.g. 12-3456-7890-1234 or 12345678901234) or a valid ABHA address (e.g. name@abdm).',
+  }),
+]).default('');
+
+const abhaVerificationSchema = z.object({
+  abhaId: z.string().trim().min(1, 'ABHA ID is required.'),
+}).strict();
 
 const optionalPhone = z.union([
   z.literal(''),
@@ -17,7 +33,7 @@ const registrationSchema = z.object({
     relationship: z.string().trim().max(50).optional().default(''),
     phone: optionalPhone,
   }).strict().default({}),
-  abhaId: z.string().trim().max(32).optional().default(''),
+  abhaId: abhaIdSchema,
   consent: z.object({
     caseTaking: z.literal(true, 'Consent to case-taking is required.'),
     documentProcessing: z.boolean().default(false),
@@ -127,4 +143,15 @@ const ayurvedaAssessmentSchema = z.object({
   nidana: z.string().trim().max(3000),
 }).strict();
 
-module.exports = { ayurvedaAssessmentSchema, caseHistoryPatchSchema, clinicalReviewSchema, clinicalSummarySchema, consentUpdateSchema, conversationSchema, documentReviewSchema, patientSearchSchema, registrationSchema };
+module.exports = {
+  abhaVerificationSchema,
+  ayurvedaAssessmentSchema,
+  caseHistoryPatchSchema,
+  clinicalReviewSchema,
+  clinicalSummarySchema,
+  consentUpdateSchema,
+  conversationSchema,
+  documentReviewSchema,
+  patientSearchSchema,
+  registrationSchema,
+};

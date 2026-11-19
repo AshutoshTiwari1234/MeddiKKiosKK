@@ -7,6 +7,7 @@ const AppError = require('../utils/AppError');
 const { hashIntakeToken } = require('../utils/intakeToken');
 const { recordAudit } = require('../services/auditService');
 const { hasUrgentPhrase, requestConversation, urgentReply } = require('../services/aiService');
+const { normalizeAbhaId, verifyAbha } = require('../services/abhaService');
 
 const INTAKE_WINDOW_MS = 2 * 60 * 60 * 1000;
 const CASE_FIELDS = [
@@ -19,10 +20,29 @@ const CASE_FIELDS = [
 const VERIFIED_HISTORY_FIELDS = CASE_FIELDS;
 
 async function registerPatient(request, response) {
-  const { consent, dateOfBirth, ...details } = request.validatedBody;
+  const { consent, dateOfBirth, abhaId, ...details } = request.validatedBody;
+  let abhaStatus = 'unverified';
+  let abhaVerifiedAt = null;
+  let abhaAuthMethods = [];
+  let normalizedAbha = '';
+
+  if (abhaId && abhaId.trim()) {
+    const verification = await verifyAbha(abhaId);
+    if (verification.valid && verification.verified) {
+      normalizedAbha = verification.abhaId;
+      abhaStatus = 'verified';
+      abhaVerifiedAt = new Date();
+      abhaAuthMethods = verification.authMethods || [];
+    }
+  }
+
   const intakeToken = crypto.randomBytes(32).toString('hex');
   const patient = await Patient.create({
     ...details,
+    abhaId: normalizedAbha,
+    abhaStatus,
+    abhaVerifiedAt,
+    abhaAuthMethods,
     dateOfBirth: dateOfBirth ? new Date(`${dateOfBirth}T00:00:00.000Z`) : null,
     consent: { ...consent, recordedAt: new Date(), policyVersion: '1.0' },
     consentHistory: [{ ...consent, recordedAt: new Date(), policyVersion: '1.0', source: 'kiosk' }],
@@ -31,7 +51,15 @@ async function registerPatient(request, response) {
     intakeExpiresAt: new Date(Date.now() + INTAKE_WINDOW_MS),
   });
 
-  await recordAudit(request, { action: 'patient.register', resourceType: 'patient', resourceId: patient.patientId });
+  await recordAudit(request, {
+    action: 'patient.register',
+    resourceType: 'patient',
+    resourceId: patient.patientId,
+    details: {
+      hasAbhaId: Boolean(normalizedAbha),
+      abhaStatus,
+    },
+  });
   response.status(201).json({ patient: patient.toJSON(), intakeToken });
 }
 
@@ -198,6 +226,9 @@ async function getPatient(request, response) {
   }
   else {
     patientData.abhaId = patient.abhaId || '';
+    patientData.abhaStatus = patient.abhaStatus || 'unverified';
+    patientData.abhaVerifiedAt = patient.abhaVerifiedAt || null;
+    patientData.abhaAuthMethods = patient.abhaAuthMethods || [];
     patientData.documents = await MedicalDocument.find({ patientId: patient.patientId }).sort({ createdAt: -1 }).lean();
   }
   response.json({ patient: patientData });
@@ -306,6 +337,58 @@ async function getPatientAuditLogs(request, response) {
   });
 }
 
+async function verifyAbhaHandler(request, response) {
+  const result = await verifyAbha(request.validatedBody.abhaId);
+  await recordAudit(request, {
+    action: 'patient.abha.verify',
+    resourceType: 'abha',
+    resourceId: result.abhaId || request.validatedBody.abhaId,
+    outcome: result.valid ? 'success' : 'denied',
+    details: { type: result.type, valid: result.valid, verified: result.verified },
+  });
+  if (!result.valid) {
+    throw new AppError(result.error || 'Invalid ABHA ID.', 400);
+  }
+  response.json(result);
+}
+
+async function verifyPatientAbha(request, response) {
+  const patient = await Patient.findOne({ patientId: request.params.patientId }).select('+abhaId');
+  if (!patient) throw new AppError('Patient record not found.', 404);
+
+  const targetAbha = request.body?.abhaId || patient.abhaId;
+  if (!targetAbha) throw new AppError('No ABHA ID provided or associated with this patient.', 400);
+
+  const result = await verifyAbha(targetAbha);
+  if (!result.valid) {
+    patient.abhaStatus = 'failed';
+    await patient.save();
+    throw new AppError(result.error || 'ABHA verification failed.', 400);
+  }
+
+  patient.abhaId = result.abhaId;
+  patient.abhaStatus = 'verified';
+  patient.abhaVerifiedAt = new Date();
+  patient.abhaAuthMethods = result.authMethods || [];
+  await patient.save();
+
+  await recordAudit(request, {
+    action: 'patient.abha.verify_record',
+    resourceType: 'patient',
+    resourceId: patient.patientId,
+    details: { abhaId: result.abhaId, type: result.type, status: 'verified' },
+  });
+
+  response.json({
+    patientId: patient.patientId,
+    abhaId: patient.abhaId,
+    abhaStatus: patient.abhaStatus,
+    abhaVerifiedAt: patient.abhaVerifiedAt,
+    abhaAuthMethods: patient.abhaAuthMethods,
+    message: result.message,
+  });
+}
+
 module.exports = {
   getConversationReply,
   getPatient,
@@ -317,4 +400,6 @@ module.exports = {
   updateAyurvedaAssessment,
   updateClinicalReview,
   updateIntakeConsent,
+  verifyAbhaHandler,
+  verifyPatientAbha,
 };
