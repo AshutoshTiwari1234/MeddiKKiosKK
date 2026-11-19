@@ -96,6 +96,41 @@ const clinicalSummarySchema = new mongoose.Schema({
   }],
 }, { _id: false });
 
+const medicationItemSchema = new mongoose.Schema({
+  name: { type: String, required: true, trim: true, maxlength: 200 },
+  dosage: { type: String, trim: true, maxlength: 100, default: '' },
+  frequency: { type: String, trim: true, maxlength: 100, default: '' },
+  duration: { type: String, trim: true, maxlength: 100, default: '' },
+  instructions: { type: String, trim: true, maxlength: 500, default: '' },
+}, { _id: false });
+
+const interactionWarningSchema = new mongoose.Schema({
+  severity: { type: String, enum: ['critical', 'major', 'moderate', 'minor'], default: 'major' },
+  drugs: [{ type: String, trim: true }],
+  description: { type: String, required: true, trim: true },
+  actionRequired: { type: String, trim: true, default: '' },
+}, { _id: false });
+
+const prescriptionVersionSchema = new mongoose.Schema({
+  version: { type: Number, required: true },
+  medications: [medicationItemSchema],
+  instructions: { type: String, trim: true, maxlength: 2000, default: '' },
+  warnings: [interactionWarningSchema],
+  prescribedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+  prescribedAt: { type: Date, default: Date.now },
+}, { _id: false });
+
+const prescriptionSchema = new mongoose.Schema({
+  version: { type: Number, default: 0 },
+  medications: [medicationItemSchema],
+  instructions: { type: String, trim: true, maxlength: 2000, default: '' },
+  warnings: [interactionWarningSchema],
+  prescribedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+  prescribedAt: { type: Date, default: null },
+  updatedAt: { type: Date, default: null },
+  history: [prescriptionVersionSchema],
+}, { _id: false });
+
 const patientSchema = new mongoose.Schema({
   patientId: {
     type: String,
@@ -125,6 +160,7 @@ const patientSchema = new mongoose.Schema({
   clinicalReview: { type: clinicalReviewSchema, default: () => ({}) },
   ayurvedaAssessment: { type: ayurvedaAssessmentSchema, default: () => ({}) },
   clinicalSummary: { type: clinicalSummarySchema, default: () => ({}) },
+  prescription: { type: prescriptionSchema, default: () => ({}) },
   intakeCredentialHash: { type: String, select: false, default: undefined },
   intakeExpiresAt: { type: Date, select: false, default: null },
 }, { timestamps: true, versionKey: false });

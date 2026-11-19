@@ -143,6 +143,23 @@ const ayurvedaAssessmentSchema = z.object({
   nidana: z.string().trim().max(3000),
 }).strict();
 
+const medicationInputSchema = z.object({
+  name: z.string().trim().min(1, 'Medication name is required.').max(200),
+  dosage: z.string().trim().max(100).default(''),
+  frequency: z.string().trim().max(100).default(''),
+  duration: z.string().trim().max(100).default(''),
+  instructions: z.string().trim().max(500).default(''),
+}).strict();
+
+const prescriptionInputSchema = z.object({
+  medications: z.array(medicationInputSchema).min(1, 'At least one medication is required.'),
+  instructions: z.string().trim().max(2000).default(''),
+}).strict();
+
+const interactionCheckSchema = z.object({
+  medications: z.array(z.union([z.string().trim().min(1), medicationInputSchema])).min(1, 'Provide medications to check.'),
+}).strict();
+
 module.exports = {
   abhaVerificationSchema,
   ayurvedaAssessmentSchema,
@@ -152,6 +169,9 @@ module.exports = {
   consentUpdateSchema,
   conversationSchema,
   documentReviewSchema,
+  interactionCheckSchema,
+  medicationInputSchema,
   patientSearchSchema,
+  prescriptionInputSchema,
   registrationSchema,
 };
