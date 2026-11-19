@@ -9,6 +9,7 @@ import ClinicalSummaryPanel from '../components/ClinicalSummaryPanel.jsx';
 import MedicalDocumentsPanel from '../components/MedicalDocumentsPanel.jsx';
 import PrescriptionBuilderPanel from '../components/PrescriptionBuilderPanel.jsx';
 import TriageVitalsPanel from '../components/TriageVitalsPanel.jsx';
+import VitalsTrendChart from '../components/VitalsTrendChart.jsx';
 import { api } from '../services/api.js';
 
 const historyFields = [
@@ -98,6 +99,7 @@ export default function PatientRecordPage() {
 
         {/* Objective Triage Vitals (Accessible to all staff) */}
         <TriageVitalsPanel patient={patient} onUpdated={loadPatient} />
+        <VitalsTrendChart patient={patient} />
 
         {patient.consentHistory?.length > 0 && <section className="panel record-history consent-history-panel"><div className="panel-heading"><div><h2><ShieldCheck size={16} /> Consent history</h2><p>Patient consent choices and withdrawals recorded during check-in.</p></div></div><div className="consent-history-list">{patient.consentHistory.slice().reverse().map((entry, index) => <article key={`${entry.recordedAt}-${index}`}><b>{new Date(entry.recordedAt).toLocaleString('en-IN')}</b><span>Case-taking: {entry.caseTaking ? 'granted' : 'withdrawn'}</span><span>Documents: {entry.documentProcessing ? 'granted' : 'withdrawn'}</span><span>AI assistance: {entry.aiAssistance ? 'granted' : 'withdrawn'}</span></article>)}</div></section>}
         {patient.caseHistory ? <section className="panel record-history"><div className="panel-heading"><div><h2><CalendarDays size={16} /> Patient-reported case history</h2><p>These original responses remain unchanged when clinician-verified entries are edited.</p></div></div><div className="history-grid">{historyFields.map(([label, field]) => <article className="history-item" key={field}><small>{label}</small><p>{patient.caseHistory[field] === null || patient.caseHistory[field] === undefined || patient.caseHistory[field] === '' ? 'Not provided' : field === 'severity' ? `${patient.caseHistory[field]} / 10` : patient.caseHistory[field]}</p></article>)}</div><div className="history-timestamp">Last saved: {formatDate(patient.caseHistoryUpdatedAt)}</div></section> : <section className="panel record-history"><div className="admin-empty"><FileHeart size={23} /><b>Patient history is not available in this view</b><span>Reception staff can view registration details. Clinical history is restricted to clinicians.</span></div></section>}

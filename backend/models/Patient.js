@@ -111,6 +111,22 @@ const vitalsSchema = new mongoose.Schema({
   recordedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
 }, { _id: false });
 
+const vitalsReadingSchema = new mongoose.Schema({
+  bloodPressure: {
+    systolic: { type: Number, min: 40, max: 300, default: null },
+    diastolic: { type: Number, min: 30, max: 200, default: null },
+  },
+  pulseRate: { type: Number, min: 20, max: 250, default: null },
+  spo2: { type: Number, min: 50, max: 100, default: null },
+  temperature: { type: Number, min: 80, max: 115, default: null },
+  weight: { type: Number, min: 1, max: 500, default: null },
+  bmi: { type: Number, min: 5, max: 100, default: null },
+  recordedAt: { type: Date, required: true },
+  recordedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+}, { _id: false });
+
+const VITALS_HISTORY_LIMIT = 100;
+
 const medicationSchema = new mongoose.Schema({
   name: { type: String, trim: true, maxlength: 150, default: '' },
   dosage: { type: String, trim: true, maxlength: 100, default: '' },
@@ -164,6 +180,7 @@ const patientSchema = new mongoose.Schema({
   ayurvedaAssessment: { type: ayurvedaAssessmentSchema, default: () => ({}) },
   clinicalSummary: { type: clinicalSummarySchema, default: () => ({}) },
   vitals: { type: vitalsSchema, default: () => ({}) },
+  vitalsHistory: { type: [vitalsReadingSchema], default: [] },
   prescription: { type: prescriptionSchema, default: () => ({}) },
   intakeCredentialHash: { type: String, select: false, default: undefined },
   intakeExpiresAt: { type: Date, select: false, default: null },
@@ -183,3 +200,4 @@ patientSchema.set('toJSON', {
 });
 
 module.exports = mongoose.model('Patient', patientSchema);
+module.exports.VITALS_HISTORY_LIMIT = VITALS_HISTORY_LIMIT;

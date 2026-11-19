@@ -250,24 +250,60 @@ async function updateAyurvedaAssessment(request, response) {
   response.json({ ayurvedaAssessment: patient.ayurvedaAssessment });
 }
 
+function toVitalsReading(vitals) {
+  return {
+    bloodPressure: {
+      systolic: vitals.bloodPressure?.systolic ?? null,
+      diastolic: vitals.bloodPressure?.diastolic ?? null,
+    },
+    pulseRate: vitals.pulseRate ?? null,
+    spo2: vitals.spo2 ?? null,
+    temperature: vitals.temperature ?? null,
+    weight: vitals.weight ?? null,
+    bmi: vitals.bmi ?? null,
+    recordedAt: vitals.recordedAt,
+    recordedBy: vitals.recordedBy ?? null,
+  };
+}
+
+async function getVitalsHistory(request, response) {
+  const patient = await Patient.findOne({ patientId: request.params.patientId }).select('patientId vitals vitalsHistory').lean();
+  if (!patient) throw new AppError('Patient record not found.', 404);
+  let readings = patient.vitalsHistory || [];
+  if (!readings.length && patient.vitals?.recordedAt) readings = [toVitalsReading(patient.vitals)];
+  readings = readings.slice().sort((a, b) => new Date(a.recordedAt) - new Date(b.recordedAt));
+  await recordAudit(request, { action: 'patient.vitals.history', resourceType: 'patient', resourceId: patient.patientId });
+  response.json({ patientId: patient.patientId, readings });
+}
+
 async function updatePatientVitals(request, response) {
   const patient = await Patient.findOne({ patientId: request.params.patientId });
   if (!patient) throw new AppError('Patient record not found.', 404);
   const vitalsData = request.validatedBody;
+  const previousVitals = patient.vitals?.toObject ? patient.vitals.toObject() : patient.vitals;
   let bmi = null;
   if (vitalsData.weight && vitalsData.height) {
     const heightInMeters = vitalsData.height / 100;
     bmi = Number((vitalsData.weight / (heightInMeters * heightInMeters)).toFixed(1));
   }
+  const recordedAt = new Date();
   patient.vitals = {
     ...vitalsData,
     bmi: bmi !== null ? bmi : patient.vitals?.bmi || null,
-    recordedAt: new Date(),
+    recordedAt,
     recordedBy: request.user._id,
   };
+  // Keep the earlier reading for legacy records that predate vitals history.
+  if (!patient.vitalsHistory.length && previousVitals?.recordedAt) {
+    patient.vitalsHistory.push(toVitalsReading(previousVitals));
+  }
+  patient.vitalsHistory.push(toVitalsReading(patient.vitals));
+  if (patient.vitalsHistory.length > Patient.VITALS_HISTORY_LIMIT) {
+    patient.vitalsHistory.splice(0, patient.vitalsHistory.length - Patient.VITALS_HISTORY_LIMIT);
+  }
   await patient.save();
   await recordAudit(request, { action: 'patient.vitals.update', resourceType: 'patient', resourceId: patient.patientId });
-  response.json({ vitals: patient.vitals });
+  response.json({ vitals: patient.vitals, vitalsHistory: patient.vitalsHistory });
 }
 
 async function updatePatientPrescription(request, response) {
@@ -322,6 +358,7 @@ module.exports = {
   getConversationReply,
   getLiveQueue,
   getPatient,
+  getVitalsHistory,
   listPatients,
   registerPatient,
   saveIntakeProgress,

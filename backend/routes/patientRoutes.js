@@ -2,7 +2,7 @@ const express = require('express');
 const { rateLimit } = require('express-rate-limit');
 const { downloadPatientDocument, getPatientDocument, reviewPatientDocument, uploadPatientDocument } = require('../controllers/documentController');
 const { generateClinicalSummary, updateClinicalSummary } = require('../controllers/summaryController');
-const { callPatientToken, getConversationReply, getLiveQueue, getPatient, listPatients, registerPatient, saveIntakeProgress, searchPatients, updateAyurvedaAssessment, updateClinicalReview, updateIntakeConsent, updatePatientPrescription, updatePatientVitals } = require('../controllers/patientController');
+const { callPatientToken, getConversationReply, getLiveQueue, getPatient, getVitalsHistory, listPatients, registerPatient, saveIntakeProgress, searchPatients, updateAyurvedaAssessment, updateClinicalReview, updateIntakeConsent, updatePatientPrescription, updatePatientVitals } = require('../controllers/patientController');
 const { exportFhirBundle } = require('../controllers/fhirController');
 const { authenticate, requireRole } = require('../middleware/authenticate');
 const authorizeDocumentIntake = require('../middleware/authorizeDocumentIntake');
@@ -28,6 +28,7 @@ router.use(authenticate, requireRole('administrator', 'doctor', 'receptionist'))
 router.get('/', listPatients);
 router.post('/search', validate(patientSearchSchema), searchPatients);
 router.post('/:patientId/call', callPatientToken);
+router.get('/:patientId/vitals/history', getVitalsHistory);
 router.patch('/:patientId/vitals', validate(vitalsInputSchema), updatePatientVitals);
 router.patch('/:patientId/prescription', requireRole('administrator', 'doctor'), validate(prescriptionInputSchema), updatePatientPrescription);
 router.get('/:patientId', getPatient);

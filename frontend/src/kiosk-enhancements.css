@@ -1941,3 +1941,77 @@
     margin-bottom: 4px;
   }
 }
+
+/* ============================================================
+   VITALS TREND CHART
+   ============================================================ */
+.vitals-trend-panel {
+  --vt-series-1: #2a78d6;
+  --vt-series-2: #eb6834;
+  --vt-surface: #ffffff;
+  --vt-band: rgba(16, 185, 129, 0.08);
+  --vt-grid: #eef2f6;
+  --vt-axis: #94a3b8;
+  --vt-text: #0f172a;
+  --vt-text-muted: #64748b;
+}
+.dark .vitals-trend-panel {
+  --vt-series-1: #3987e5;
+  --vt-series-2: #d95926;
+  --vt-surface: #202d3a;
+  --vt-band: rgba(16, 185, 129, 0.12);
+  --vt-grid: #2c3a48;
+  --vt-axis: #7d8c9b;
+  --vt-text: #e3ebf2;
+  --vt-text-muted: #9fb0c0;
+}
+.vitals-trend-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 12px;
+}
+.vitals-trend-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px;
+  border: 1px solid var(--border-color, #e2e8f0);
+  border-radius: 10px;
+  background: var(--vt-surface);
+}
+.dark .vitals-trend-card { border-color: #334251; }
+.vitals-trend-card header { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.vitals-trend-card header span { font-size: 11px; font-weight: 700; color: var(--vt-text-muted); }
+.vitals-trend-card header b { font: 700 16px 'Manrope', sans-serif; color: var(--vt-text); }
+.vitals-trend-card header small { font-size: 10px; font-weight: 500; color: var(--vt-text-muted); }
+.vitals-trend-card footer { font-size: 9px; color: var(--vt-text-muted); }
+.vitals-trend-legend { display: flex; gap: 12px; font-size: 10px; color: var(--vt-text-muted); }
+.vitals-trend-legend span, .vitals-trend-tooltip span { display: inline-flex; align-items: center; gap: 5px; }
+.vitals-trend-legend i, .vitals-trend-tooltip i { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+.vitals-trend-plot { position: relative; }
+.vitals-trend-plot svg { width: 100%; height: auto; display: block; overflow: visible; cursor: crosshair; }
+.vt-band { fill: var(--vt-band); }
+.vt-grid { stroke: var(--vt-grid); stroke-width: 1; }
+.vt-axis { fill: var(--vt-axis); font-size: 9px; }
+.vt-crosshair { stroke: var(--vt-axis); stroke-width: 1; stroke-dasharray: 3 3; }
+.vt-dot { stroke: var(--vt-surface); stroke-width: 2; }
+.vitals-trend-tooltip {
+  position: absolute;
+  top: 0;
+  transform: translate(-50%, -100%);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 7px 9px;
+  border: 1px solid var(--border-color, #e2e8f0);
+  border-radius: 7px;
+  background: var(--vt-surface);
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.12);
+  font-size: 10px;
+  color: var(--vt-text);
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 2;
+}
+.vitals-trend-tooltip small { color: var(--vt-text-muted); }
+.vitals-trend-empty { display: grid; place-items: center; min-height: 110px; font-size: 10px; color: var(--vt-text-muted); }
