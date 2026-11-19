@@ -2,7 +2,7 @@ const express = require('express');
 const { rateLimit } = require('express-rate-limit');
 const { downloadPatientDocument, getPatientDocument, reviewPatientDocument, uploadPatientDocument } = require('../controllers/documentController');
 const { generateClinicalSummary, updateClinicalSummary } = require('../controllers/summaryController');
-const { getConversationReply, getPatient, listPatients, registerPatient, saveIntakeProgress, searchPatients, updateAyurvedaAssessment, updateClinicalReview, updateIntakeConsent } = require('../controllers/patientController');
+const { getConversationReply, getPatient, getPatientAuditLogs, listPatients, registerPatient, saveIntakeProgress, searchPatients, updateAyurvedaAssessment, updateClinicalReview, updateIntakeConsent } = require('../controllers/patientController');
 const { exportFhirBundle } = require('../controllers/fhirController');
 const { authenticate, requireRole } = require('../middleware/authenticate');
 const authorizeDocumentIntake = require('../middleware/authorizeDocumentIntake');
@@ -27,6 +27,7 @@ router.use(authenticate, requireRole('administrator', 'doctor', 'receptionist'))
 router.get('/', listPatients);
 router.post('/search', validate(patientSearchSchema), searchPatients);
 router.get('/:patientId', getPatient);
+router.get('/:patientId/audit-logs', requireRole('administrator', 'doctor'), getPatientAuditLogs);
 router.get('/:patientId/fhir-r4', requireRole('administrator', 'doctor'), exportFhirBundle);
 router.post('/:patientId/summary/generate', requireRole('administrator', 'doctor'), generateClinicalSummary);
 router.patch('/:patientId/summary', requireRole('administrator', 'doctor'), validate(clinicalSummarySchema), updateClinicalSummary);

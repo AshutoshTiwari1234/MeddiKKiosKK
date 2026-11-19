@@ -2,6 +2,7 @@ const crypto = require('node:crypto');
 const Patient = require('../models/Patient');
 const MedicalDocument = require('../models/MedicalDocument');
 const EmergencyAlert = require('../models/EmergencyAlert');
+const AuditLog = require('../models/AuditLog');
 const AppError = require('../utils/AppError');
 const { hashIntakeToken } = require('../utils/intakeToken');
 const { recordAudit } = require('../services/auditService');
@@ -173,9 +174,22 @@ async function searchPatients(request, response) {
 async function getPatient(request, response) {
   const patient = await Patient.findOne({ patientId: request.params.patientId }).select('+abhaId');
   if (!patient) throw new AppError('Patient record not found.', 404);
-  await recordAudit(request, { action: 'patient.view', resourceType: 'patient', resourceId: patient.patientId });
   const patientData = patient.toJSON();
   const role = request.user.role === 'admin' ? 'administrator' : request.user.role;
+  const accessedSections = role === 'receptionist'
+    ? ['demographics']
+    : ['demographics', 'caseHistory', 'clinicalReview', 'ayurvedaAssessment', 'clinicalSummary', 'documents'];
+
+  await recordAudit(request, {
+    action: 'patient.view',
+    resourceType: 'patient',
+    resourceId: patient.patientId,
+    details: {
+      accessedByRole: role,
+      accessedSections,
+    },
+  });
+
   if (role === 'receptionist') {
     delete patientData.caseHistory;
     delete patientData.clinicalReview;
@@ -217,7 +231,16 @@ async function updateClinicalReview(request, response) {
   patient.clinicalReview.reviewedBy = status === 'pending' ? null : request.user._id;
   patient.clinicalReview.reviewedAt = status === 'pending' ? null : new Date();
   await patient.save();
-  await recordAudit(request, { action: `patient.clinical_review.${status}`, resourceType: 'patient', resourceId: patient.patientId });
+  await recordAudit(request, {
+    action: `patient.clinical_review.${status}`,
+    resourceType: 'patient',
+    resourceId: patient.patientId,
+    details: {
+      status,
+      doctorNotesUpdated: Boolean(doctorNotes),
+      verifiedFields: Object.keys(verifiedHistory || {}),
+    },
+  });
   response.json({ clinicalReview: patient.clinicalReview });
 }
 
@@ -226,8 +249,72 @@ async function updateAyurvedaAssessment(request, response) {
   if (!patient) throw new AppError('Patient record not found.', 404);
   patient.ayurvedaAssessment = { ...request.validatedBody, assessedBy: request.user._id, assessedAt: new Date() };
   await patient.save();
-  await recordAudit(request, { action: 'patient.ayurveda_assessment.update', resourceType: 'patient', resourceId: patient.patientId });
+  await recordAudit(request, {
+    action: 'patient.ayurveda_assessment.update',
+    resourceType: 'patient',
+    resourceId: patient.patientId,
+    details: {
+      assessedFields: Object.keys(request.validatedBody || {}),
+    },
+  });
   response.json({ ayurvedaAssessment: patient.ayurvedaAssessment });
 }
 
-module.exports = { getConversationReply, getPatient, listPatients, registerPatient, saveIntakeProgress, searchPatients, updateAyurvedaAssessment, updateClinicalReview, updateIntakeConsent };
+async function getPatientAuditLogs(request, response) {
+  const patient = await Patient.findOne({ patientId: request.params.patientId });
+  if (!patient) throw new AppError('Patient record not found.', 404);
+
+  const page = Math.max(1, Number.parseInt(request.query.page, 10) || 1);
+  const limit = Math.min(100, Math.max(1, Number.parseInt(request.query.limit, 10) || 50));
+
+  const filter = {
+    resourceType: 'patient',
+    resourceId: patient.patientId,
+  };
+
+  const [logs, total] = await Promise.all([
+    AuditLog.find(filter)
+      .populate('actorId', 'name email role')
+      .sort({ createdAt: -1 })
+      .skip((page - 1) * limit)
+      .limit(limit)
+      .lean(),
+    AuditLog.countDocuments(filter),
+  ]);
+
+  await recordAudit(request, {
+    action: 'patient.audit_logs.view',
+    resourceType: 'patient',
+    resourceId: patient.patientId,
+    details: { requestedPage: page, returnedCount: logs.length },
+  });
+
+  response.json({
+    auditLogs: logs.map((log) => ({
+      id: log._id,
+      actor: log.actorId ? { id: log.actorId._id, name: log.actorId.name, email: log.actorId.email, role: log.actorId.role } : { name: log.actorName || 'System', role: log.actorRole || 'system' },
+      action: log.action,
+      resourceType: log.resourceType,
+      resourceId: log.resourceId,
+      outcome: log.outcome,
+      details: log.details || null,
+      ipAddress: log.ipAddress,
+      userAgent: log.userAgent,
+      timestamp: log.createdAt,
+    })),
+    pagination: { page, limit, total, pages: Math.ceil(total / limit) },
+  });
+}
+
+module.exports = {
+  getConversationReply,
+  getPatient,
+  getPatientAuditLogs,
+  listPatients,
+  registerPatient,
+  saveIntakeProgress,
+  searchPatients,
+  updateAyurvedaAssessment,
+  updateClinicalReview,
+  updateIntakeConsent,
+};

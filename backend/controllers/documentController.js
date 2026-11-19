@@ -55,7 +55,12 @@ async function uploadPatientDocument(request, response) {
 async function getPatientDocument(request, response) {
   const document = await MedicalDocument.findOne({ _id: request.params.documentId, patientId: request.params.patientId });
   if (!document) throw new AppError('Medical document not found.', 404);
-  await recordAudit(request, { action: 'patient.document.view', resourceType: 'patient', resourceId: document.patientId });
+  await recordAudit(request, {
+    action: 'patient.document.view',
+    resourceType: 'patient',
+    resourceId: document.patientId,
+    details: { documentId: document._id.toString(), category: document.category, mimeType: document.mimeType },
+  });
   response.json({ document });
 }
 
@@ -65,7 +70,12 @@ async function downloadPatientDocument(request, response) {
   const storageName = path.basename(document.storageName);
   const filePath = path.join(uploadRoot, storageName);
   await fs.promises.access(filePath).catch(() => { throw new AppError('The stored original document is unavailable.', 404); });
-  await recordAudit(request, { action: 'patient.document.download', resourceType: 'patient', resourceId: document.patientId });
+  await recordAudit(request, {
+    action: 'patient.document.download',
+    resourceType: 'patient',
+    resourceId: document.patientId,
+    details: { documentId: document._id.toString(), originalName: document.originalName, mimeType: document.mimeType },
+  });
   response.setHeader('Content-Type', document.mimeType);
   response.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(document.originalName)}"`);
   response.setHeader('X-Content-Type-Options', 'nosniff');
@@ -83,7 +93,12 @@ async function reviewPatientDocument(request, response) {
     reviewedAt: request.validatedBody.reviewStatus === 'reviewed' ? new Date() : null,
   });
   await document.save();
-  await recordAudit(request, { action: `patient.document.${document.reviewStatus}`, resourceType: 'patient', resourceId: document.patientId });
+  await recordAudit(request, {
+    action: `patient.document.${document.reviewStatus}`,
+    resourceType: 'patient',
+    resourceId: document.patientId,
+    details: { documentId: document._id.toString(), reviewStatus: document.reviewStatus, notesUpdated: Boolean(request.validatedBody.reviewNotes) },
+  });
   response.json({ document });
 }
 
