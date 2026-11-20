@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { clinicalReviewSchema } from '../schemas/clinicalReviewSchema.js';
 import { api } from '../services/api.js';
+import { useToast } from './ToastProvider.jsx';
 
 const fields = [
   ['Chief complaint', 'chiefComplaint', 2], ['Onset', 'onset', 1], ['Duration', 'duration', 1], ['Location', 'location', 1],
@@ -23,23 +24,20 @@ function initialValues(patient) {
 }
 
 export default function ClinicalReviewPanel({ patient, onUpdated }) {
+  const toast = useToast();
   const [savingStatus, setSavingStatus] = useState('');
-  const [error, setError] = useState('');
-  const [notice, setNotice] = useState('');
   const { register, handleSubmit, reset, formState: { errors } } = useForm({ resolver: zodResolver(clinicalReviewSchema), defaultValues: initialValues(patient) });
 
   useEffect(() => { reset(initialValues(patient)); }, [patient, reset]);
 
   const save = async (values, status) => {
     setSavingStatus(status);
-    setError('');
-    setNotice('');
     try {
       await api.patch(`/patients/${encodeURIComponent(patient.patientId)}/clinical-review`, { ...values, status });
-      setNotice(status === 'approved' ? 'History approved and marked as clinician reviewed.' : status === 'revisions_needed' ? 'Follow-up was requested for this history.' : 'Review changes saved as a draft.');
+      toast.success(status === 'approved' ? 'History approved and marked as clinician reviewed.' : status === 'revisions_needed' ? 'Follow-up was requested for this history.' : 'Review changes saved as a draft.');
       await onUpdated();
     } catch (requestError) {
-      setError(requestError.response?.data?.error?.message || 'Could not save the clinical review.');
+      toast.error(requestError.response?.data?.error?.message || 'Could not save the clinical review.');
     } finally {
       setSavingStatus('');
     }
@@ -49,7 +47,6 @@ export default function ClinicalReviewPanel({ patient, onUpdated }) {
   const statusLabel = { pending: 'Pending review', approved: 'Clinician reviewed', revisions_needed: 'Follow-up requested' }[reviewStatus];
 
   return <section className="panel review-panel"><div className="panel-heading"><div><h2><ClipboardCheck size={16} /> Clinician review</h2><p>Patient responses remain preserved separately from verified entries.</p></div><span className={`review-status ${reviewStatus}`}>{statusLabel}</span></div>
-    {error && <div className="admin-alert error" role="alert">{error}</div>}{notice && <div className="admin-alert success" role="status"><Check size={15} />{notice}</div>}
     <form onSubmit={(event) => { event.preventDefault(); handleSubmit((values) => save(values, 'pending'))(); }}>
       <div className="review-fields">{fields.map(([label, field, rows]) => {
         const reported = patient.caseHistory?.[field];

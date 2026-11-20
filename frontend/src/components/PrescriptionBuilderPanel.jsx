@@ -1,6 +1,7 @@
-import { AlertCircle, Check, FileCheck, Pill, Plus, Printer, Save, Trash2, UtensilsCrossed } from 'lucide-react';
+import { FileCheck, Pill, Plus, Printer, Save, Trash2, UtensilsCrossed } from 'lucide-react';
 import { useState } from 'react';
 import { api } from '../services/api.js';
+import { useToast } from './ToastProvider.jsx';
 
 const COMMON_DRUGS = [
   { name: 'Paracetamol', dosage: '500 mg', form: 'Tablet', frequency: '1-0-1', duration: '3 days', instructions: 'After food' },
@@ -13,9 +14,8 @@ const COMMON_DRUGS = [
 ];
 
 export default function PrescriptionBuilderPanel({ patient, onUpdated }) {
+  const toast = useToast();
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
 
   const currentRx = patient?.prescription || {};
   const [medications, setMedications] = useState(() => currentRx.medications?.length ? currentRx.medications : []);
@@ -49,8 +49,6 @@ export default function PrescriptionBuilderPanel({ patient, onUpdated }) {
   const handleSave = async (e) => {
     e?.preventDefault();
     setSaving(true);
-    setError('');
-    setSuccess('');
 
     try {
       const validMeds = medications.filter((m) => m.name.trim().length > 0);
@@ -68,10 +66,10 @@ export default function PrescriptionBuilderPanel({ patient, onUpdated }) {
       };
 
       await api.patch(`/patients/${encodeURIComponent(patient.patientId)}/prescription`, payload);
-      setSuccess('Prescription & treatment plan saved successfully.');
+      toast.success('Prescription & treatment plan saved successfully.');
       onUpdated?.();
     } catch (err) {
-      setError(err.response?.data?.error?.message || 'Failed to save prescription.');
+      toast.error(err.response?.data?.error?.message || 'Failed to save prescription.');
     } finally {
       setSaving(false);
     }
@@ -95,8 +93,6 @@ export default function PrescriptionBuilderPanel({ patient, onUpdated }) {
         </div>
       </div>
 
-      {error && <div className="admin-alert error" role="alert"><AlertCircle size={15} /> {error}</div>}
-      {success && <div className="admin-alert success" role="status"><Check size={15} /> {success}</div>}
 
       {/* Quick Fast-Add Chips */}
       <div className="rx-fast-chips">

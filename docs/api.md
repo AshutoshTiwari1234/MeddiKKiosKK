@@ -41,6 +41,8 @@ The first administrator is created through the interactive `npm run create-admin
 - `GET /api/patients?today=true&limit=100` requires an authenticated staff account and returns dashboard queue fields without clinical history or ABHA.
 - `POST /api/patients/search` accepts `{ "q", "page", "limit" }` in the JSON body and requires an authenticated staff account. It returns paginated results without clinical history or ABHA, keeping search terms out of request URLs.
 - `GET /api/patients/:patientId` requires an authenticated staff account. Doctors and administrators receive case history and ABHA; receptionists receive registration details only.
+- `PATCH /api/patients/:patientId/vitals` accepts blood pressure, pulse, SpO₂, temperature, weight and height. Each save updates the current vitals and appends a timestamped reading to `vitalsHistory` (the most recent 100 readings are kept).
+- `GET /api/patients/:patientId/vitals/history` requires an authenticated staff account and returns `{ patientId, readings }`, oldest first, for the vitals trend chart.
 - `PATCH /api/patients/:patientId/clinical-review` is restricted to doctors and administrators. It accepts `status` (`pending`, `approved`, or `revisions_needed`), `doctorNotes`, and clinician-verified history. Approval is rejected until the patient completes intake. Original patient responses are retained separately, previous clinician review versions are snapshotted, and every update is audited.
 - `PATCH /api/patients/:patientId/ayurveda` is restricted to doctors and administrators. It accepts the structured Dashavidha Pariksha, Prakriti/Vikriti, Agni, Koshtha, and Nidana assessment fields and records the assessing staff member and time.
 - `GET /api/patients/:patientId/documents/:documentId` and `GET .../:documentId/file` require doctor/administrator role. The file endpoint streams the original; storage paths are never returned.
@@ -48,6 +50,45 @@ The first administrator is created through the interactive `npm run create-admin
 - `POST /api/patients/:patientId/summary/generate` assembles a draft from patient responses, verified history, Ayurveda assessment, and only clinician-reviewed document text. If the patient gave AI-assistance consent and an optional provider is configured, the provider may create the draft. Otherwise it is assembled deterministically.
 - `PATCH /api/patients/:patientId/summary` accepts `{ "text", "status": "draft" | "approved" }`; approval requires completed intake. Previous summary versions are retained.
 - `GET /api/patients/:patientId/fhir-r4` is restricted to doctors and administrators. It returns a downloadable FHIR R4 `Bundle` of type `collection` containing a `Patient` and a `DocumentReference` for the approved clinical summary. Intake must be complete and the summary approved. The response is audit logged and is not sent to an external server.
+
+## OPD analytics
+
+- `GET /api/analytics/opd?from=YYYY-MM-DD&to=YYYY-MM-DD&department=` requires an authenticated staff account. Both dates are optional (default: today) and the range may cover up to 366 days. It returns:
+  - `overview`: `totalPatients`, `patientsCalled`, `averageWaitMinutes`, `maxWaitMinutes`, `averageConsultationMinutes`, `casesCompleted`, `reviewsApproved`, counts `byStatus`, and the `peakHour`.
+  - `departments`: one row per department with `totalPatients`, `sharePercent`, average waiting and consultation time, and counts by status.
+  - `hourly` and `daily` check-in counts.
+- Waiting time is measured from check-in to the first time the patient is called. `POST /api/patients/:patientId/call` accepts `{ "status": "waiting" | "called" | "in_consultation" | "done" }` (default `called`) and records `calledAt`, `consultationStartedAt` and `consultationEndedAt`. Patients without a call timestamp are left out of the averages.
+
+## Clinic sessions (OPD schedules)
+
+A clinic session is one doctor's OPD shift in one cabin on one day. Times are local 24-hour `HH:MM`. Shift presets: `morning` 09:00–13:00, `afternoon` 14:00–17:00, `evening` 17:00–20:00; `custom` needs `startTime` and `endTime` (a preset may also be given explicit times).
+
+- `GET /api/sessions?date=YYYY-MM-DD` or `?from=&to=` (default today, up to 92 days), with optional `doctorId`, `department`, `cabin`, `status` and `includeCancelled=true`. Available to all staff.
+- `GET /api/sessions/cabins?date=` returns cabin allocation for a day: each allocated cabin with its sessions and, for today, the session occupying it right now.
+- `GET /api/sessions/:sessionId` returns one session.
+- `POST /api/sessions` (administrator or doctor) accepts `{ doctorId, date, shift, startTime?, endTime?, cabin, department?, slotMinutes? (default 15), maxPatients?, notes? }`. Doctors can only schedule themselves and may omit `doctorId`. Administrators must name an active doctor. Past dates are rejected.
+- `PATCH /api/sessions/:sessionId` (administrator or the assigned doctor) changes date, shift, times, cabin, department, slot length, capacity or notes. Completed and cancelled sessions cannot be edited.
+- `PATCH /api/sessions/:sessionId/status` accepts `{ "status": "active" | "completed" | "cancelled", "reason"? }`. Allowed changes: scheduled → active or cancelled, active → completed or cancelled.
+- Creating or moving a session returns `409` if the doctor already has an overlapping session, or if the cabin is already allocated at that time (cabin names are compared ignoring case and extra spaces). Back-to-back sessions are allowed, and cancelled sessions free their slot.
+
+## Follow-up appointments
+
+A follow-up takes one slot inside one of the doctor's clinic sessions. The slot length is the session's `slotMinutes`, and start times must fall on the session's slot grid (for a 09:00 session with 15-minute slots: 09:00, 09:15, …).
+
+- `POST /api/appointments` (administrator or doctor) accepts `{ patientId, doctorId?, date, startTime, reason?, notes? }`. Doctors may omit `doctorId` to book with themselves.
+- `GET /api/appointments/availability?doctorId=&date=` lists the doctor's sessions that day with every slot marked `available` or not (`booked`, `past` or `session_full`).
+- `GET /api/appointments` filters by `date` or `from`/`to` (default today), `doctorId`, `patientId` and `status`. With only `patientId`, it returns that patient's full follow-up history.
+- `GET /api/appointments/:appointmentId` returns one appointment.
+- `PATCH /api/appointments/:appointmentId/reschedule` accepts `{ date, startTime, doctorId? }` and keeps the previous times in `rescheduledFrom`.
+- `PATCH /api/appointments/:appointmentId/status` accepts `{ "status": "completed" | "cancelled" | "no_show", "reason"? }`. Only booked appointments can change, and completed or no-show only once the appointment time has started.
+
+Double bookings are rejected with `409`:
+- The doctor already has a booked appointment in that slot.
+- The patient already has a follow-up in the same clinic session, or another appointment at the same time.
+- The session has reached `maxPatients`.
+- The time is not covered by a scheduled or active session for that doctor.
+
+Unique database indexes on booked appointments (doctor + start time, patient + session) also stop two requests that arrive at the same moment from both getting the slot. A clinic session with booked follow-ups cannot be cancelled, or moved so that a booking falls outside it, until those bookings are rescheduled or cancelled.
 
 ## Emergency alerts
 

@@ -171,6 +171,22 @@ const ayurvedaAssessmentSchema = z.object({
   nidana: z.string().trim().max(3000),
 }).strict();
 
+const vitalsInputSchema = z.object({
+  bloodPressure: z.object({
+    systolic: z.number().int().min(40).max(300).nullable().optional(),
+    diastolic: z.number().int().min(30).max(200).nullable().optional(),
+  }).optional(),
+  pulseRate: z.number().int().min(20).max(250).nullable().optional(),
+  spo2: z.number().int().min(50).max(100).nullable().optional(),
+  temperature: z.number().min(80).max(115).nullable().optional(),
+  weight: z.number().min(1).max(500).nullable().optional(),
+  height: z.number().min(20).max(300).nullable().optional(),
+}).strict();
+
+const callStatusSchema = z.preprocess((value) => value ?? {}, z.object({
+  status: z.enum(['waiting', 'called', 'in_consultation', 'done']).default('called'),
+}).strict());
+
 const medicationInputSchema = z.object({
   name: z.string().trim().min(1, 'Medication name is required.').max(200),
   dosage: z.string().trim().max(100).default(''),
@@ -205,4 +221,6 @@ module.exports = {
   patientSearchSchema,
   prescriptionInputSchema,
   registrationSchema,
+  vitalsInputSchema,
+  callStatusSchema,
 };

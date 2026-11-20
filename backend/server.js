@@ -9,6 +9,9 @@ const authRoutes = require('./routes/authRoutes');
 const patientRoutes = require('./routes/patientRoutes');
 const userRoutes = require('./routes/userRoutes');
 const alertRoutes = require('./routes/alertRoutes');
+const analyticsRoutes = require('./routes/analyticsRoutes');
+const clinicSessionRoutes = require('./routes/clinicSessionRoutes');
+const appointmentRoutes = require('./routes/appointmentRoutes');
 const { connectDatabase } = require('./config/database');
 const AppError = require('./utils/AppError');
 const { jwtSecret } = require('./utils/auth');
@@ -31,7 +34,9 @@ app.use(cookieParser());
 morgan.token('safe-path', (request) => new URL(request.originalUrl, 'http://localhost').pathname
   .replace(/^\/api\/patients\/[^/]+\/documents\/[^/]+/, '/api/patients/:record/documents/:document')
   .replace(/^\/api\/patients\/[^/]+/, '/api/patients/:record')
-  .replace(/^\/api\/users\/[^/]+/, '/api/users/:user'));
+  .replace(/^\/api\/users\/[^/]+/, '/api/users/:user')
+  .replace(/^\/api\/sessions\/(?!cabins$)[^/]+/, '/api/sessions/:session')
+  .replace(/^\/api\/appointments\/(?!availability$)[^/]+/, '/api/appointments/:appointment'));
 app.use(morgan(':method :safe-path :status :response-time ms'));
 
 app.get('/', (_request, response) => {
@@ -56,6 +61,9 @@ app.use('/api/auth', authRoutes);
 app.use('/api/patients', patientRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/alerts', alertRoutes);
+app.use('/api/analytics', analyticsRoutes);
+app.use('/api/sessions', clinicSessionRoutes);
+app.use('/api/appointments', appointmentRoutes);
 
 app.use('/api', (_request, response) => {
   response.status(404).json({ error: { message: 'API route not found.' } });

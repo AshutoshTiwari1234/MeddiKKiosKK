@@ -104,6 +104,37 @@ const medicationItemSchema = new mongoose.Schema({
   instructions: { type: String, trim: true, maxlength: 500, default: '' },
 }, { _id: false });
 
+const vitalsSchema = new mongoose.Schema({
+  bloodPressure: {
+    systolic: { type: Number, min: 40, max: 300, default: null },
+    diastolic: { type: Number, min: 30, max: 200, default: null },
+  },
+  pulseRate: { type: Number, min: 20, max: 250, default: null },
+  spo2: { type: Number, min: 50, max: 100, default: null },
+  temperature: { type: Number, min: 80, max: 115, default: null },
+  weight: { type: Number, min: 1, max: 500, default: null },
+  height: { type: Number, min: 20, max: 300, default: null },
+  bmi: { type: Number, min: 5, max: 100, default: null },
+  recordedAt: { type: Date, default: null },
+  recordedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+}, { _id: false });
+
+const vitalsReadingSchema = new mongoose.Schema({
+  bloodPressure: {
+    systolic: { type: Number, min: 40, max: 300, default: null },
+    diastolic: { type: Number, min: 30, max: 200, default: null },
+  },
+  pulseRate: { type: Number, min: 20, max: 250, default: null },
+  spo2: { type: Number, min: 50, max: 100, default: null },
+  temperature: { type: Number, min: 80, max: 115, default: null },
+  weight: { type: Number, min: 1, max: 500, default: null },
+  bmi: { type: Number, min: 5, max: 100, default: null },
+  recordedAt: { type: Date, required: true },
+  recordedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+}, { _id: false });
+
+const VITALS_HISTORY_LIMIT = 100;
+
 const interactionWarningSchema = new mongoose.Schema({
   severity: { type: String, enum: ['critical', 'major', 'moderate', 'minor'], default: 'major' },
   drugs: [{ type: String, trim: true }],
@@ -149,6 +180,9 @@ const patientSchema = new mongoose.Schema({
   queueToken: { type: String, trim: true, maxlength: 20, default: '' },
   roomNumber: { type: String, trim: true, maxlength: 50, default: 'Room 1' },
   callStatus: { type: String, enum: ['waiting', 'called', 'in_consultation', 'done'], default: 'waiting' },
+  calledAt: { type: Date, default: null },
+  consultationStartedAt: { type: Date, default: null },
+  consultationEndedAt: { type: Date, default: null },
   emergencyContact: { type: emergencyContactSchema, default: () => ({}) },
   abhaId: { type: String, trim: true, maxlength: 32, default: '', select: false },
   abhaStatus: { type: String, enum: ['unverified', 'verified', 'failed'], default: 'unverified', index: true },
@@ -164,6 +198,8 @@ const patientSchema = new mongoose.Schema({
   clinicalReview: { type: clinicalReviewSchema, default: () => ({}) },
   ayurvedaAssessment: { type: ayurvedaAssessmentSchema, default: () => ({}) },
   clinicalSummary: { type: clinicalSummarySchema, default: () => ({}) },
+  vitals: { type: vitalsSchema, default: () => ({}) },
+  vitalsHistory: { type: [vitalsReadingSchema], default: [] },
   prescription: { type: prescriptionSchema, default: () => ({}) },
   intakeCredentialHash: { type: String, select: false, default: undefined },
   intakeExpiresAt: { type: Date, select: false, default: null },
@@ -172,6 +208,7 @@ const patientSchema = new mongoose.Schema({
 patientSchema.index({ fullName: 1 });
 patientSchema.index({ phone: 1 }, { sparse: true });
 patientSchema.index({ createdAt: -1 });
+patientSchema.index({ createdAt: 1, department: 1 });
 
 patientSchema.set('toJSON', {
   transform(_document, value) {
@@ -183,3 +220,4 @@ patientSchema.set('toJSON', {
 });
 
 module.exports = mongoose.model('Patient', patientSchema);
+module.exports.VITALS_HISTORY_LIMIT = VITALS_HISTORY_LIMIT;

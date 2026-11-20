@@ -9,7 +9,7 @@
     "create-admin": "node scripts/createAdmin.js",
     "seed:demo": "node scripts/seedDemoData.js",
     "test": "node --test",
-    "test:integration": "node --test tests/integration/auth.js"
+    "test:integration": "node --test tests/integration/auth.js tests/integration/clinic.js"
   },
   "keywords": [],
   "author": "",
