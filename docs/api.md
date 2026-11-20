@@ -77,6 +77,13 @@ A clinic session is one doctor's OPD shift in one cabin on one day. Times are lo
 - `PATCH /api/sessions/:sessionId/status` accepts `{ "status": "active" | "completed" | "cancelled", "reason"? }`. Allowed changes: scheduled → active or cancelled, active → completed or cancelled.
 - Creating or moving a session returns `409` if the doctor already has an overlapping session, or if the cabin is already allocated at that time (cabin names are compared ignoring case and extra spaces). Back-to-back sessions are allowed, and cancelled sessions free their slot.
 
+## Hospital department directory
+
+- `GET /api/departments/directory?date=YYYY-MM-DD` is read-only and available to authenticated administrators, doctors, and receptionists. It defaults to today in server-local time. Invalid dates return `400`.
+- The response contains `{ date, departments }`. Each department has `{ department, doctors }`. Each doctor has `{ doctorId, name, available, sessions }`. Sessions provide `{ _id, shift, startTime, endTime, cabin, status }` with the same 24-hour times and cabin labels as the Clinic Session API.
+- The directory includes departments from active, approved doctor rosters and their non-cancelled sessions on the selected day. A session appears under its own department, including when it differs from the doctor's roster department. A doctor with no session in a roster department has `available: false` and `sessions: []`. Registration-only labels are omitted.
+- A `scheduled` or `active` session makes the doctor available on the selected day in that department. A `completed` session is visible and does not count toward availability. Use `GET /api/appointments/availability` for individual slots.
+
 ## Follow-up appointments
 
 A follow-up takes one slot inside one of the doctor's clinic sessions. The slot length is the session's `slotMinutes`, and start times must fall on the session's slot grid (for a 09:00 session with 15-minute slots: 09:00, 09:15, …).

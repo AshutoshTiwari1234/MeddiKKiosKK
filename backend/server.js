@@ -13,6 +13,7 @@ const feedbackRoutes = require('./routes/feedbackRoutes');
 const analyticsRoutes = require('./routes/analyticsRoutes');
 const clinicSessionRoutes = require('./routes/clinicSessionRoutes');
 const appointmentRoutes = require('./routes/appointmentRoutes');
+const departmentDirectoryRoutes = require('./routes/departmentDirectoryRoutes');
 const { connectDatabase } = require('./config/database');
 const AppError = require('./utils/AppError');
 const { jwtSecret } = require('./utils/auth');
@@ -66,6 +67,7 @@ app.use('/api/feedback', feedbackRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/sessions', clinicSessionRoutes);
 app.use('/api/appointments', appointmentRoutes);
+app.use('/api/departments', departmentDirectoryRoutes);
 
 app.use('/api', (_request, response) => {
   response.status(404).json({ error: { message: 'API route not found.' } });
