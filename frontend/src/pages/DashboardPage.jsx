@@ -9,6 +9,7 @@ import { api } from '../services/api.js';
 import DashboardLayout from '../layouts/DashboardLayout.jsx';
 import EmergencyAlertPanel from '../components/EmergencyAlertPanel.jsx';
 import PatientQueueFilters, { matchesQueueFilters } from '../components/PatientQueueFilters.jsx';
+import { useToast } from '../components/ToastProvider.jsx';
 
 function fetchQueue(includeSeverity) {
   const params = { today: 'true', limit: 100 };
@@ -17,6 +18,7 @@ function fetchQueue(includeSeverity) {
 }
 
 export default function DashboardPage() {
+  const toast = useToast();
   const dispatch = useDispatch();
   const darkMode = useSelector((state) => state.ui.darkMode);
   const user = useSelector((state) => state.auth.user);
@@ -56,11 +58,13 @@ export default function DashboardPage() {
     e.preventDefault();
     e.stopPropagation();
     try {
-      await api.post(`/patients/${encodeURIComponent(patientId)}/call`, { status: 'called' });
-      // Refresh
+      const { data: called } = await api.post(`/patients/${encodeURIComponent(patientId)}/call`, { status: 'called' });
+      toast.success(`Token ${called.queueToken || called.patientId} called to ${called.roomNumber || 'the consultation room'}.`);
       const { data } = await fetchQueue(canFilterSeverity);
       setTodayPatients(data.patients);
-    } catch (_err) {}
+    } catch (requestError) {
+      toast.error(requestError.response?.data?.error?.message || 'Could not call this patient. Please try again.');
+    }
   };
   const stats = [
     { label: 'Patients today', value: todayPatients.length, delta: 'Registered for today’s visit', icon: UsersRound, tone: 'blue' },

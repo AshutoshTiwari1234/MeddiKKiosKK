@@ -84,7 +84,12 @@ async function generateClinicalSummary(request, response) {
   patient.clinicalSummary.approvedAt = null;
   patient.clinicalSummary.approvedBy = null;
   await patient.save();
-  await recordAudit(request, { action: 'patient.summary.generate', resourceType: 'patient', resourceId: patient.patientId });
+  await recordAudit(request, {
+    action: 'patient.summary.generate',
+    resourceType: 'patient',
+    resourceId: patient.patientId,
+    details: { mode: patient.clinicalSummary.mode, version: patient.clinicalSummary.version },
+  });
   response.json({ clinicalSummary: patient.clinicalSummary });
 }
 
@@ -103,7 +108,12 @@ async function updateClinicalSummary(request, response) {
   patient.clinicalSummary.approvedAt = status === 'approved' ? new Date() : null;
   patient.clinicalSummary.approvedBy = status === 'approved' ? request.user._id : null;
   await patient.save();
-  await recordAudit(request, { action: `patient.summary.${status}`, resourceType: 'patient', resourceId: patient.patientId });
+  await recordAudit(request, {
+    action: `patient.summary.${status}`,
+    resourceType: 'patient',
+    resourceId: patient.patientId,
+    details: { status, version: patient.clinicalSummary.version },
+  });
   response.json({ clinicalSummary: patient.clinicalSummary });
 }
 

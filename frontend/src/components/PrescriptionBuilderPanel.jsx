@@ -1,6 +1,7 @@
-import { AlertCircle, Check, FileCheck, Pill, Plus, Printer, Save, Trash2, UtensilsCrossed } from 'lucide-react';
+import { FileCheck, Pill, Plus, Printer, Save, Trash2, UtensilsCrossed } from 'lucide-react';
 import { useState } from 'react';
 import { api } from '../services/api.js';
+import { useToast } from './ToastProvider.jsx';
 
 const COMMON_DRUGS = [
   { name: 'Paracetamol', dosage: '500 mg', form: 'Tablet', frequency: '1-0-1', duration: '3 days', instructions: 'After food' },
@@ -13,11 +14,11 @@ const COMMON_DRUGS = [
 ];
 
 export default function PrescriptionBuilderPanel({ patient, onUpdated }) {
+  const toast = useToast();
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
 
   const currentRx = patient?.prescription || {};
+  const [warnings, setWarnings] = useState(() => currentRx.warnings || []);
   const [medications, setMedications] = useState(() => currentRx.medications?.length ? currentRx.medications : []);
   const [investigations, setInvestigations] = useState(() => currentRx.investigations?.join(', ') || '');
   const [pathya, setPathya] = useState(() => currentRx.ayushAdvice?.pathya || '');
@@ -49,15 +50,15 @@ export default function PrescriptionBuilderPanel({ patient, onUpdated }) {
   const handleSave = async (e) => {
     e?.preventDefault();
     setSaving(true);
-    setError('');
-    setSuccess('');
 
     try {
-      const validMeds = medications.filter((m) => m.name.trim().length > 0);
+      const medicationItems = medications.map(({ name, dosage, form, frequency, duration, instructions }) => ({
+        name, dosage, form, frequency, duration, instructions,
+      }));
       const invList = investigations.split(',').map((s) => s.trim()).filter(Boolean);
 
       const payload = {
-        medications: validMeds,
+        medications: medicationItems,
         investigations: invList,
         ayushAdvice: {
           pathya: pathya.trim(),
@@ -67,11 +68,12 @@ export default function PrescriptionBuilderPanel({ patient, onUpdated }) {
         followUpDate: followUpDate || null,
       };
 
-      await api.patch(`/patients/${encodeURIComponent(patient.patientId)}/prescription`, payload);
-      setSuccess('Prescription & treatment plan saved successfully.');
+      const { data } = await api.put(`/patients/${encodeURIComponent(patient.patientId)}/prescription`, payload);
+      setWarnings(data.warnings);
+      toast.success('Prescription & treatment plan saved successfully.');
       onUpdated?.();
     } catch (err) {
-      setError(err.response?.data?.error?.message || 'Failed to save prescription.');
+      toast.error(err.response?.data?.error?.message || 'Failed to save prescription.');
     } finally {
       setSaving(false);
     }
@@ -95,8 +97,6 @@ export default function PrescriptionBuilderPanel({ patient, onUpdated }) {
         </div>
       </div>
 
-      {error && <div className="admin-alert error" role="alert"><AlertCircle size={15} /> {error}</div>}
-      {success && <div className="admin-alert success" role="status"><Check size={15} /> {success}</div>}
 
       {/* Quick Fast-Add Chips */}
       <div className="rx-fast-chips">
@@ -160,9 +160,10 @@ export default function PrescriptionBuilderPanel({ patient, onUpdated }) {
                   <td>
                     <select
                       className="rx-cell-select"
-                      value={med.form}
+                      value={med.form ?? ''}
                       onChange={(e) => updateMedication(idx, 'form', e.target.value)}
                     >
+                      <option value="">Not specified</option>
                       <option value="Tablet">Tablet</option>
                       <option value="Capsule">Capsule</option>
                       <option value="Syrup">Syrup</option>
@@ -286,6 +287,22 @@ export default function PrescriptionBuilderPanel({ patient, onUpdated }) {
           </label>
         </div>
       </div>
+
+      {warnings.length > 0 && (
+        <div className="admin-alert error" role="alert">
+          <div>
+            <strong>Interaction warnings on the saved prescription</strong>
+            <ul>
+              {warnings.map((warning) => (
+                <li key={warning.drugs.join('|') + warning.description}>
+                  <b>{warning.severity.toUpperCase()} · {warning.drugs.join(' + ')}</b>
+                  <p>{warning.description} {warning.actionRequired}</p>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      )}
 
       <div className="rx-save-actions">
         <button type="button" className="button button-primary" onClick={handleSave} disabled={saving}>

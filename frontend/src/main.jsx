@@ -4,6 +4,7 @@ import { Provider } from 'react-redux';
 import { BrowserRouter } from 'react-router-dom';
 import App from './App.jsx';
 import { store } from './redux/store.js';
+import { ToastProvider } from './components/ToastProvider.jsx';
 import './index.css';
 import './auth.css';
 import './login.css';
@@ -22,7 +23,9 @@ import './kiosk-enhancements.css';
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <Provider store={store}>
-      <BrowserRouter><App /></BrowserRouter>
+      <ToastProvider>
+        <BrowserRouter><App /></BrowserRouter>
+      </ToastProvider>
     </Provider>
   </React.StrictMode>,
 );

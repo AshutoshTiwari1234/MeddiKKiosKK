@@ -5,15 +5,16 @@ import { useForm } from 'react-hook-form';
 import DashboardLayout from '../layouts/DashboardLayout.jsx';
 import { staffUserSchema } from '../schemas/staffUserSchema.js';
 import { api } from '../services/api.js';
+import { useToast } from '../components/ToastProvider.jsx';
 
 const initialValues = { name: '', email: '', password: '', role: 'doctor', department: '' };
 
 export default function StaffUsersPage() {
+  const toast = useToast();
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
-  const [notice, setNotice] = useState('');
   const { register, handleSubmit, reset, formState: { errors } } = useForm({ resolver: zodResolver(staffUserSchema), defaultValues: initialValues });
   const pendingCount = users.filter((user) => user.approvalStatus === 'pending').length;
 
@@ -34,49 +35,44 @@ export default function StaffUsersPage() {
 
   const createUser = async (values) => {
     setSaving(true);
-    setError('');
-    setNotice('');
     try {
       await api.post('/users', values);
       reset(initialValues);
-      setNotice('Staff account created. They can sign in with the email and temporary password you set.');
+      toast.success('Staff account created. They can sign in with the email and temporary password you set.');
       await loadUsers();
     } catch (requestError) {
-      setError(requestError.response?.data?.error?.message || 'Could not create the staff account.');
+      toast.error(requestError.response?.data?.error?.message || 'Could not create the staff account.');
     } finally {
       setSaving(false);
     }
   };
 
   const toggleActive = async (user) => {
-    setError('');
-    setNotice('');
     try {
       const { data } = await api.patch(`/users/${user._id}/status`, { active: !user.active });
       setUsers((current) => current.map((item) => item._id === user._id ? data.user : item).sort((left, right) => Number(right.approvalStatus === 'pending') - Number(left.approvalStatus === 'pending')));
-      setNotice(user.approvalStatus === 'pending' ? `${user.name}’s account request was approved.` : `${user.name}’s account is now ${data.user.active ? 'active' : 'deactivated'}.`);
+      toast.success(user.approvalStatus === 'pending' ? `${user.name}’s account request was approved.` : `${user.name}’s account is now ${data.user.active ? 'active' : 'deactivated'}.`);
     } catch (requestError) {
-      setError(requestError.response?.data?.error?.message || 'Could not update this account.');
+      toast.error(requestError.response?.data?.error?.message || 'Could not update this account.');
     }
   };
 
   const rejectRequest = async (user) => {
-    if (!window.confirm(`Reject the account request from ${user.name}?`)) return;
-    setError('');
-    setNotice('');
+    const confirmed = await toast.confirm(`Reject the account request from ${user.name}? This cannot be undone.`, { title: 'Reject account request', confirmLabel: 'Reject' });
+    if (!confirmed) return;
     try {
       await api.delete(`/users/${encodeURIComponent(user._id)}`);
       setUsers((current) => current.filter((item) => item._id !== user._id));
-      setNotice(`${user.name}’s account request was rejected.`);
+      toast.success(`${user.name}’s account request was rejected.`);
     } catch (requestError) {
-      setError(requestError.response?.data?.error?.message || 'Could not reject this account request.');
+      toast.error(requestError.response?.data?.error?.message || 'Could not reject this account request.');
     }
   };
 
   return <div className="app-root min-h-screen font-sans"><DashboardLayout><header className="topbar"><div className="breadcrumbs">Workspace <span>/</span> <b>Staff accounts</b></div><div className="top-actions"><span className="role-badge">Administrator</span></div></header>
     <div className="page-content admin-page"><div className="welcome-row"><div><span className="admin-eyebrow"><UserRoundCog size={15} /> ADMINISTRATION</span><h1>Staff accounts</h1><p>Manage authorized access to the MediKiosk workspace.</p></div><div className="admin-count"><UsersRound size={17} /><b>{users.length}</b><span>accounts</span></div></div>
       {pendingCount > 0 && <div className="account-request-callout" role="status"><b>{pendingCount} account {pendingCount === 1 ? 'request' : 'requests'} waiting for approval</b><span>Pending requests appear first below. Select Approve to activate an account or Reject to remove the request.</span></div>}
-      {error && <div className="admin-alert error" role="alert"><AlertCircle size={17} />{error}</div>}{notice && <div className="admin-alert success" role="status"><Check size={17} />{notice}</div>}
+      {error && <div className="admin-alert error" role="alert"><AlertCircle size={17} />{error}</div>}
       <div className="admin-grid"><section className="panel users-panel"><div className="panel-heading"><div><h2>Team members</h2><p>Only active accounts can access staff tools.</p></div><button className="icon-button small-icon" title="Refresh staff list" onClick={loadUsers}><RefreshCw size={15} /></button></div>
         {loading ? <div className="admin-loading"><LoaderCircle size={19} className="spin" /> Loading staff accounts…</div> : users.length === 0 ? <div className="admin-empty"><UsersRound size={23} /><b>No staff accounts found</b><span>Create a staff account to get started.</span></div> : <div className="table-scroll"><table className="staff-table"><thead><tr><th>TEAM MEMBER</th><th>ROLE</th><th>DEPARTMENT</th><th>STATUS</th><th /></tr></thead><tbody>{users.map((user) => { const pending = user.approvalStatus === 'pending'; return <tr key={user._id}><td><b>{user.name}</b><small>{user.email}</small></td><td><span className={`role-pill ${user.role}`}>{user.role}</span></td><td>{user.department || '—'}</td><td><span className={`account-status ${pending ? 'pending' : user.active ? 'active' : 'inactive'}`}><i />{pending ? 'Pending approval' : user.active ? 'Active' : 'Inactive'}</span></td><td><button className="account-action" disabled={saving} onClick={() => toggleActive(user)}>{pending ? 'Approve' : user.active ? 'Deactivate' : 'Activate'}</button>{pending && <button className="account-action reject-action" onClick={() => rejectRequest(user)}>Reject</button>}</td></tr>;})}</tbody></table></div>}
       </section>

@@ -1,8 +1,9 @@
 const express = require('express');
 const { rateLimit } = require('express-rate-limit');
-const { downloadPatientDocument, getPatientDocument, reviewPatientDocument, uploadPatientDocument } = require('../controllers/documentController');
+const { categorizePatientDocument, downloadPatientDocument, getPatientDocument, reviewPatientDocument, uploadPatientDocument, verifyPatientDocument } = require('../controllers/documentController');
 const { generateClinicalSummary, updateClinicalSummary } = require('../controllers/summaryController');
-const { callPatientToken, getConversationReply, getLiveQueue, getPatient, listPatients, registerPatient, saveIntakeProgress, searchPatients, updateAyurvedaAssessment, updateClinicalReview, updateIntakeConsent, updatePatientPrescription, updatePatientVitals } = require('../controllers/patientController');
+const { callPatientToken, getConversationReply, getLiveQueue, getPatient, getPatientAuditLogs, getVitalsHistory, listPatients, registerPatient, saveIntakeProgress, searchPatients, updateAyurvedaAssessment, updateClinicalReview, updateIntakeConsent, updatePatientVitals, verifyAbhaHandler, verifyPatientAbha } = require('../controllers/patientController');
+const { checkInteractionsHandler, getPrescription, getPrescriptionHistory, updatePrescription } = require('../controllers/prescriptionController');
 const { exportFhirBundle } = require('../controllers/fhirController');
 const { authenticate, requireRole } = require('../middleware/authenticate');
 const authorizeDocumentIntake = require('../middleware/authorizeDocumentIntake');
@@ -10,7 +11,7 @@ const { uploadDocument } = require('../middleware/documentUpload');
 const requireDatabase = require('../middleware/requireDatabase');
 const requireIntakeToken = require('../middleware/requireIntakeToken');
 const validate = require('../middleware/validate');
-const { ayurvedaAssessmentSchema, caseHistoryPatchSchema, clinicalReviewSchema, clinicalSummarySchema, consentUpdateSchema, conversationSchema, documentReviewSchema, patientSearchSchema, prescriptionInputSchema, registrationSchema, vitalsInputSchema } = require('../schemas/patientSchemas');
+const { abhaVerificationSchema, ayurvedaAssessmentSchema, callStatusSchema, caseHistoryPatchSchema, clinicalReviewSchema, clinicalSummarySchema, consentUpdateSchema, conversationSchema, documentCategoryUpdateSchema, documentReviewSchema, documentVerificationSchema, interactionCheckSchema, patientSearchSchema, prescriptionInputSchema, registrationSchema, vitalsInputSchema } = require('../schemas/patientSchemas');
 
 const router = express.Router();
 const registrationLimiter = rateLimit({ windowMs: 60 * 60 * 1000, limit: 20, standardHeaders: 'draft-8', legacyHeaders: false });
@@ -18,6 +19,7 @@ const documentUploadLimiter = rateLimit({ windowMs: 60 * 60 * 1000, limit: 30, s
 
 router.use(requireDatabase);
 router.get('/queue/live', getLiveQueue);
+router.post('/verify-abha', validate(abhaVerificationSchema), verifyAbhaHandler);
 router.post('/register', registrationLimiter, validate(registrationSchema), registerPatient);
 router.post('/intake/conversation', requireIntakeToken, validate(conversationSchema), getConversationReply);
 router.patch('/intake/consent', requireIntakeToken, validate(consentUpdateSchema), updateIntakeConsent);
@@ -27,16 +29,24 @@ router.patch('/intake/case-history', requireIntakeToken, validate(caseHistoryPat
 router.use(authenticate, requireRole('administrator', 'doctor', 'receptionist'));
 router.get('/', listPatients);
 router.post('/search', validate(patientSearchSchema), searchPatients);
-router.post('/:patientId/call', callPatientToken);
+router.post('/check-interactions', requireRole('administrator', 'doctor'), validate(interactionCheckSchema), checkInteractionsHandler);
+router.post('/:patientId/call', validate(callStatusSchema), callPatientToken);
+router.get('/:patientId/vitals/history', getVitalsHistory);
 router.patch('/:patientId/vitals', validate(vitalsInputSchema), updatePatientVitals);
-router.patch('/:patientId/prescription', requireRole('administrator', 'doctor'), validate(prescriptionInputSchema), updatePatientPrescription);
 router.get('/:patientId', getPatient);
+router.post('/:patientId/verify-abha', requireRole('administrator', 'doctor'), verifyPatientAbha);
+router.get('/:patientId/audit-logs', requireRole('administrator', 'doctor'), getPatientAuditLogs);
+router.get('/:patientId/prescription', requireRole('administrator', 'doctor'), getPrescription);
+router.put('/:patientId/prescription', requireRole('administrator', 'doctor'), validate(prescriptionInputSchema), updatePrescription);
+router.get('/:patientId/prescription/history', requireRole('administrator', 'doctor'), getPrescriptionHistory);
 router.get('/:patientId/fhir-r4', requireRole('administrator', 'doctor'), exportFhirBundle);
 router.post('/:patientId/summary/generate', requireRole('administrator', 'doctor'), generateClinicalSummary);
 router.patch('/:patientId/summary', requireRole('administrator', 'doctor'), validate(clinicalSummarySchema), updateClinicalSummary);
 router.get('/:patientId/documents/:documentId/file', requireRole('administrator', 'doctor'), downloadPatientDocument);
 router.get('/:patientId/documents/:documentId', requireRole('administrator', 'doctor'), getPatientDocument);
 router.patch('/:patientId/documents/:documentId/review', requireRole('administrator', 'doctor'), validate(documentReviewSchema), reviewPatientDocument);
+router.patch('/:patientId/documents/:documentId/verify', requireRole('administrator', 'doctor'), validate(documentVerificationSchema), verifyPatientDocument);
+router.patch('/:patientId/documents/:documentId/category', requireRole('administrator', 'doctor'), validate(documentCategoryUpdateSchema), categorizePatientDocument);
 router.patch('/:patientId/clinical-review', requireRole('administrator', 'doctor'), validate(clinicalReviewSchema), updateClinicalReview);
 router.patch('/:patientId/ayurveda', requireRole('administrator', 'doctor'), validate(ayurvedaAssessmentSchema), updateAyurvedaAssessment);
 

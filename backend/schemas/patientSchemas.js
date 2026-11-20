@@ -1,4 +1,20 @@
 const { z } = require('zod');
+const { validateAbhaId } = require('../services/abhaService');
+
+const abhaIdSchema = z.union([
+  z.literal(''),
+  z.string().trim().refine((val) => {
+    if (!val) return true;
+    const { valid } = validateAbhaId(val);
+    return valid;
+  }, {
+    message: 'Invalid ABHA ID format. Must be a 14-digit ABHA number (e.g. 12-3456-7890-1234 or 12345678901234) or a valid ABHA address (e.g. name@abdm).',
+  }),
+]).default('');
+
+const abhaVerificationSchema = z.object({
+  abhaId: z.string().trim().min(1, 'ABHA ID is required.'),
+}).strict();
 
 const optionalPhone = z.union([
   z.literal(''),
@@ -18,7 +34,7 @@ const registrationSchema = z.object({
     relationship: z.string().trim().max(50).optional().default(''),
     phone: optionalPhone,
   }).strict().default({}),
-  abhaId: z.string().trim().max(32).optional().default(''),
+  abhaId: abhaIdSchema,
   consent: z.object({
     caseTaking: z.literal(true, 'Consent to case-taking is required.'),
     documentProcessing: z.boolean().default(false),
@@ -75,10 +91,37 @@ const consentUpdateSchema = z.object({
   aiAssistance: z.boolean().optional(),
 }).strict().refine((value) => Object.keys(value).length > 0, 'Choose at least one consent setting to update.');
 
+const documentCategoryEnum = z.enum([
+  'prescription',
+  'lab_report',
+  'radiology_report',
+  'discharge_summary',
+  'diagnostic_report',
+  'clinical_notes',
+  'immunization_record',
+  'ayush_prescription',
+  'other',
+]);
+
+const documentVerificationSchema = z.object({
+  verificationStatus: z.enum(['unverified', 'pending_verification', 'verified', 'rejected', 'inconclusive']),
+  category: documentCategoryEnum.optional(),
+  verificationNotes: z.string().trim().max(2000).default(''),
+  verificationConfidence: z.enum(['high', 'medium', 'low', 'unspecified']).default('unspecified'),
+  verifiedData: z.record(z.string(), z.any()).optional().nullable(),
+}).strict();
+
+const documentCategoryUpdateSchema = z.object({
+  category: documentCategoryEnum,
+}).strict();
+
 const documentReviewSchema = z.object({
-  reviewedText: z.string().trim().max(20000),
+  reviewedText: z.string().trim().max(20000).optional(),
   reviewNotes: z.string().trim().max(2000).default(''),
-  reviewStatus: z.enum(['pending', 'reviewed']),
+  reviewStatus: z.enum(['pending', 'reviewed']).default('reviewed'),
+  verificationStatus: z.enum(['unverified', 'pending_verification', 'verified', 'rejected', 'inconclusive']).optional(),
+  category: documentCategoryEnum.optional(),
+  verificationNotes: z.string().trim().max(2000).optional(),
 }).strict();
 
 const clinicalSummarySchema = z.object({
@@ -140,36 +183,57 @@ const vitalsInputSchema = z.object({
   height: z.number().min(20).max(300).nullable().optional(),
 }).strict();
 
+const callStatusSchema = z.preprocess((value) => value ?? {}, z.object({
+  status: z.enum(['waiting', 'called', 'in_consultation', 'done']).default('called'),
+}).strict());
+
 const medicationInputSchema = z.object({
-  name: z.string().trim().min(1).max(150),
-  dosage: z.string().trim().max(100).optional().default(''),
-  form: z.string().trim().max(50).optional().default('Tablet'),
-  frequency: z.string().trim().max(50).optional().default('1-0-1'),
-  duration: z.string().trim().max(50).optional().default('5 days'),
-  instructions: z.string().trim().max(200).optional().default('After food'),
+  name: z.string().trim().min(1, 'Medication name is required.').max(200),
+  dosage: z.string().trim().max(100).default(''),
+  form: z.string().trim().max(50).optional(),
+  frequency: z.string().trim().max(100).default(''),
+  duration: z.string().trim().max(100).default(''),
+  instructions: z.string().trim().max(500).default(''),
 }).strict();
 
 const prescriptionInputSchema = z.object({
-  medications: z.array(medicationInputSchema).optional().default([]),
-  investigations: z.array(z.string().trim().max(200)).optional().default([]),
+  medications: z.array(medicationInputSchema),
+  instructions: z.string().trim().max(2000).optional(),
+  investigations: z.array(z.string().trim().min(1).max(200)).optional(),
   ayushAdvice: z.object({
-    pathya: z.string().trim().max(2000).optional().default(''),
-    apathya: z.string().trim().max(2000).optional().default(''),
-  }).optional().default({}),
-  generalAdvice: z.string().trim().max(3000).optional().default(''),
-  followUpDate: z.union([z.literal(''), z.iso.date()]).nullable().optional(),
+    pathya: z.string().trim().max(2000).optional(),
+    apathya: z.string().trim().max(2000).optional(),
+  }).strict().optional(),
+  generalAdvice: z.string().trim().max(3000).optional(),
+  followUpDate: z.iso.date().nullable().optional(),
+}).strict().refine(
+  ({ medications, investigations, ayushAdvice, generalAdvice, followUpDate }) =>
+    Boolean(medications.length || investigations?.length || ayushAdvice?.pathya ||
+      ayushAdvice?.apathya || generalAdvice || followUpDate),
+  { message: 'Enter a medication or add treatment-plan details.', path: ['medications'] },
+);
+
+const interactionCheckSchema = z.object({
+  medications: z.array(z.union([z.string().trim().min(1), medicationInputSchema])).min(1, 'Provide medications to check.'),
 }).strict();
 
 module.exports = {
+  abhaVerificationSchema,
   ayurvedaAssessmentSchema,
   caseHistoryPatchSchema,
   clinicalReviewSchema,
   clinicalSummarySchema,
   consentUpdateSchema,
   conversationSchema,
+  documentCategoryEnum,
+  documentCategoryUpdateSchema,
   documentReviewSchema,
+  documentVerificationSchema,
+  interactionCheckSchema,
+  medicationInputSchema,
   patientSearchSchema,
   prescriptionInputSchema,
   registrationSchema,
   vitalsInputSchema,
+  callStatusSchema,
 };
