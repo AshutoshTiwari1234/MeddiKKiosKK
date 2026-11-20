@@ -50,7 +50,12 @@ async function exportFhirBundle(request, response) {
       { fullUrl: documentReference, resource: note },
     ],
   };
-  await recordAudit(request, { action: 'patient.fhir.export', resourceType: 'patient', resourceId: patient.patientId });
+  await recordAudit(request, {
+    action: 'patient.fhir.export',
+    resourceType: 'patient',
+    resourceId: patient.patientId,
+    details: { exportFormat: 'FHIR_R4_JSON', summaryApprovedAt: patient.clinicalSummary?.approvedAt },
+  });
   response.setHeader('Content-Type', 'application/fhir+json; charset=utf-8');
   response.setHeader('Content-Disposition', `attachment; filename="${patient.patientId}-fhir-r4.json"`);
   response.json(bundle);

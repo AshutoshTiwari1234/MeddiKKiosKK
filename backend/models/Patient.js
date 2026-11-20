@@ -96,41 +96,39 @@ const clinicalSummarySchema = new mongoose.Schema({
   }],
 }, { _id: false });
 
-const vitalsSchema = new mongoose.Schema({
-  bloodPressure: {
-    systolic: { type: Number, min: 40, max: 300, default: null },
-    diastolic: { type: Number, min: 30, max: 200, default: null },
-  },
-  pulseRate: { type: Number, min: 20, max: 250, default: null },
-  spo2: { type: Number, min: 50, max: 100, default: null },
-  temperature: { type: Number, min: 80, max: 115, default: null },
-  weight: { type: Number, min: 1, max: 500, default: null },
-  height: { type: Number, min: 20, max: 300, default: null },
-  bmi: { type: Number, min: 5, max: 100, default: null },
-  recordedAt: { type: Date, default: null },
-  recordedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+const medicationItemSchema = new mongoose.Schema({
+  name: { type: String, required: true, trim: true, maxlength: 200 },
+  dosage: { type: String, trim: true, maxlength: 100, default: '' },
+  frequency: { type: String, trim: true, maxlength: 100, default: '' },
+  duration: { type: String, trim: true, maxlength: 100, default: '' },
+  instructions: { type: String, trim: true, maxlength: 500, default: '' },
 }, { _id: false });
 
-const medicationSchema = new mongoose.Schema({
-  name: { type: String, trim: true, maxlength: 150, default: '' },
-  dosage: { type: String, trim: true, maxlength: 100, default: '' },
-  form: { type: String, trim: true, maxlength: 50, default: 'Tablet' },
-  frequency: { type: String, trim: true, maxlength: 50, default: '1-0-1' },
-  duration: { type: String, trim: true, maxlength: 50, default: '5 days' },
-  instructions: { type: String, trim: true, maxlength: 200, default: 'After food' },
+const interactionWarningSchema = new mongoose.Schema({
+  severity: { type: String, enum: ['critical', 'major', 'moderate', 'minor'], default: 'major' },
+  drugs: [{ type: String, trim: true }],
+  description: { type: String, required: true, trim: true },
+  actionRequired: { type: String, trim: true, default: '' },
+}, { _id: false });
+
+const prescriptionVersionSchema = new mongoose.Schema({
+  version: { type: Number, required: true },
+  medications: [medicationItemSchema],
+  instructions: { type: String, trim: true, maxlength: 2000, default: '' },
+  warnings: [interactionWarningSchema],
+  prescribedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+  prescribedAt: { type: Date, default: Date.now },
 }, { _id: false });
 
 const prescriptionSchema = new mongoose.Schema({
-  medications: { type: [medicationSchema], default: [] },
-  investigations: { type: [String], default: [] },
-  ayushAdvice: {
-    pathya: { type: String, trim: true, maxlength: 2000, default: '' },
-    apathya: { type: String, trim: true, maxlength: 2000, default: '' },
-  },
-  generalAdvice: { type: String, trim: true, maxlength: 3000, default: '' },
-  followUpDate: { type: Date, default: null },
+  version: { type: Number, default: 0 },
+  medications: [medicationItemSchema],
+  instructions: { type: String, trim: true, maxlength: 2000, default: '' },
+  warnings: [interactionWarningSchema],
   prescribedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
   prescribedAt: { type: Date, default: null },
+  updatedAt: { type: Date, default: null },
+  history: [prescriptionVersionSchema],
 }, { _id: false });
 
 const patientSchema = new mongoose.Schema({
@@ -153,6 +151,9 @@ const patientSchema = new mongoose.Schema({
   callStatus: { type: String, enum: ['waiting', 'called', 'in_consultation', 'done'], default: 'waiting' },
   emergencyContact: { type: emergencyContactSchema, default: () => ({}) },
   abhaId: { type: String, trim: true, maxlength: 32, default: '', select: false },
+  abhaStatus: { type: String, enum: ['unverified', 'verified', 'failed'], default: 'unverified', index: true },
+  abhaVerifiedAt: { type: Date, default: null },
+  abhaAuthMethods: { type: [String], default: [] },
   consent: { type: consentSchema, default: () => ({}) },
   consentHistory: { type: [consentHistorySchema], default: [] },
   createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null, index: true },
@@ -163,7 +164,6 @@ const patientSchema = new mongoose.Schema({
   clinicalReview: { type: clinicalReviewSchema, default: () => ({}) },
   ayurvedaAssessment: { type: ayurvedaAssessmentSchema, default: () => ({}) },
   clinicalSummary: { type: clinicalSummarySchema, default: () => ({}) },
-  vitals: { type: vitalsSchema, default: () => ({}) },
   prescription: { type: prescriptionSchema, default: () => ({}) },
   intakeCredentialHash: { type: String, select: false, default: undefined },
   intakeExpiresAt: { type: Date, select: false, default: null },

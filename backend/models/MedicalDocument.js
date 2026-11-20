@@ -8,7 +8,22 @@ const candidateSchema = new mongoose.Schema({
 const medicalDocumentSchema = new mongoose.Schema({
   patient: { type: mongoose.Schema.Types.ObjectId, ref: 'Patient', required: true, index: true },
   patientId: { type: String, required: true, index: true },
-  category: { type: String, enum: ['prescription', 'lab_report', 'discharge_summary', 'other'], required: true },
+  category: {
+    type: String,
+    enum: [
+      'prescription',
+      'lab_report',
+      'radiology_report',
+      'discharge_summary',
+      'diagnostic_report',
+      'clinical_notes',
+      'immunization_record',
+      'ayush_prescription',
+      'other',
+    ],
+    required: true,
+    index: true,
+  },
   originalName: { type: String, required: true, trim: true, maxlength: 180 },
   storageName: { type: String, required: true, unique: true, select: false },
   mimeType: { type: String, enum: ['application/pdf', 'image/jpeg', 'image/png'], required: true },
@@ -22,6 +37,17 @@ const medicalDocumentSchema = new mongoose.Schema({
   reviewStatus: { type: String, enum: ['pending', 'reviewed'], default: 'pending', index: true },
   reviewedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
   reviewedAt: { type: Date, default: null },
+  verificationStatus: {
+    type: String,
+    enum: ['unverified', 'pending_verification', 'verified', 'rejected', 'inconclusive'],
+    default: 'unverified',
+    index: true,
+  },
+  verifiedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+  verifiedAt: { type: Date, default: null },
+  verificationNotes: { type: String, trim: true, maxlength: 2000, default: '' },
+  verificationConfidence: { type: String, enum: ['high', 'medium', 'low', 'unspecified'], default: 'unspecified' },
+  verifiedData: { type: mongoose.Schema.Types.Mixed, default: null },
 }, { timestamps: true, versionKey: false });
 
 medicalDocumentSchema.index({ patientId: 1, createdAt: -1 });
