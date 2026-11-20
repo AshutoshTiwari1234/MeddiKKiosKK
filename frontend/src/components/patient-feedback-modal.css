@@ -1,0 +1,95 @@
+.patient-feedback-slip-actions {
+  flex-wrap: wrap;
+}
+
+.patient-feedback-dialog {
+  width: min(420px, calc(100% - 32px));
+  max-height: calc(100% - 32px);
+  padding: 24px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  background: var(--bg-surface);
+  color: var(--text-main);
+  box-shadow: var(--shadow-elevated);
+}
+
+.patient-feedback-dialog::backdrop {
+  background: rgba(15, 23, 42, 0.55);
+}
+
+.patient-feedback-dialog h2 {
+  margin: 0 0 6px;
+  font: 700 21px var(--font-display);
+}
+
+.patient-feedback-dialog p {
+  margin: 0;
+  color: var(--text-body);
+  font-size: 14px;
+}
+
+.patient-feedback-stars {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+  padding: 0;
+  margin: 16px 0;
+  border: 0;
+}
+
+.patient-feedback-star > span {
+  display: grid;
+  min-width: 44px;
+  min-height: 52px;
+  justify-items: center;
+  align-content: center;
+  gap: 3px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.patient-feedback-star > .rated {
+  border-color: #fbbf24;
+  background: var(--warning-bg);
+  color: #92400e;
+}
+
+.patient-feedback-star > .rated svg {
+  fill: #fbbf24;
+}
+
+.patient-feedback-star input:focus-visible + span,
+.patient-feedback-actions .button:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: 2px;
+}
+
+.patient-feedback-dialog .patient-feedback-error {
+  color: #a64d45;
+}
+
+.patient-feedback-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 18px;
+}
+
+.patient-feedback-dialog :disabled + span,
+.patient-feedback-actions .button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+@media print {
+  .patient-feedback-dialog,
+  .patient-feedback-dialog::backdrop {
+    display: none;
+  }
+}

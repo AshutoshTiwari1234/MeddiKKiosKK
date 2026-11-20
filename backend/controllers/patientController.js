@@ -185,7 +185,8 @@ function escapeRegex(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-async function listPatients(request, response, filters = request.query) {
+async function listPatients(request, response, searchFilters) {
+  const filters = request.method === 'GET' ? request.query : searchFilters;
   const page = Math.max(1, Number.parseInt(filters.page, 10) || 1);
   const limit = Math.min(100, Math.max(1, Number.parseInt(filters.limit, 10) || 20));
   const filter = {};
@@ -207,13 +208,20 @@ async function listPatients(request, response, filters = request.query) {
     filter.createdAt = { $gte: start };
   }
 
+  const includeSeverity = request.method === 'GET' && filters.today === 'true' && filters.includeSeverity === 'true'
+    && ['administrator', 'admin', 'doctor'].includes(request.user?.role);
+  const fields = 'patientId fullName dateOfBirth gender phone preferredLanguage department queueToken roomNumber callStatus caseStatus clinicalReview.status createdAt caseHistoryUpdatedAt vitals';
+
   const [patients, total] = await Promise.all([
-    Patient.find(filter).select('patientId fullName dateOfBirth gender phone preferredLanguage department queueToken roomNumber callStatus caseStatus clinicalReview.status createdAt caseHistoryUpdatedAt vitals')
+    Patient.find(filter).select(includeSeverity ? `${fields} caseHistory.severity` : fields)
       .sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit).lean(),
     Patient.countDocuments(filter),
   ]);
   await recordAudit(request, { action: search ? 'patient.search' : 'patient.list', resourceType: 'patient' });
-  response.json({ patients, pagination: { page, limit, total, pages: Math.ceil(total / limit) } });
+  const results = includeSeverity
+    ? patients.map(({ caseHistory, ...patient }) => ({ ...patient, reportedSeverity: caseHistory?.severity ?? null }))
+    : patients;
+  response.json({ patients: results, pagination: { page, limit, total, pages: Math.ceil(total / limit) } });
 }
 
 async function searchPatients(request, response) {
@@ -244,6 +252,7 @@ async function getPatient(request, response) {
     delete patientData.clinicalReview;
     delete patientData.ayurvedaAssessment;
     delete patientData.clinicalSummary;
+    delete patientData.prescription;
   }
   else {
     patientData.abhaId = patient.abhaId || '';

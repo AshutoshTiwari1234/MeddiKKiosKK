@@ -99,6 +99,7 @@ const clinicalSummarySchema = new mongoose.Schema({
 const medicationItemSchema = new mongoose.Schema({
   name: { type: String, required: true, trim: true, maxlength: 200 },
   dosage: { type: String, trim: true, maxlength: 100, default: '' },
+  form: { type: String, trim: true, maxlength: 50, default: '' },
   frequency: { type: String, trim: true, maxlength: 100, default: '' },
   duration: { type: String, trim: true, maxlength: 100, default: '' },
   instructions: { type: String, trim: true, maxlength: 500, default: '' },
@@ -142,7 +143,18 @@ const interactionWarningSchema = new mongoose.Schema({
   actionRequired: { type: String, trim: true, default: '' },
 }, { _id: false });
 
+const treatmentPlanFields = {
+  investigations: { type: [String], default: [] },
+  ayushAdvice: {
+    pathya: { type: String, trim: true, maxlength: 2000, default: '' },
+    apathya: { type: String, trim: true, maxlength: 2000, default: '' },
+  },
+  generalAdvice: { type: String, trim: true, maxlength: 3000, default: '' },
+  followUpDate: { type: Date, default: null },
+};
+
 const prescriptionVersionSchema = new mongoose.Schema({
+  ...treatmentPlanFields,
   version: { type: Number, required: true },
   medications: [medicationItemSchema],
   instructions: { type: String, trim: true, maxlength: 2000, default: '' },
@@ -152,6 +164,7 @@ const prescriptionVersionSchema = new mongoose.Schema({
 }, { _id: false });
 
 const prescriptionSchema = new mongoose.Schema({
+  ...treatmentPlanFields,
   version: { type: Number, default: 0 },
   medications: [medicationItemSchema],
   instructions: { type: String, trim: true, maxlength: 2000, default: '' },

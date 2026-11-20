@@ -190,15 +190,28 @@ const callStatusSchema = z.preprocess((value) => value ?? {}, z.object({
 const medicationInputSchema = z.object({
   name: z.string().trim().min(1, 'Medication name is required.').max(200),
   dosage: z.string().trim().max(100).default(''),
+  form: z.string().trim().max(50).optional(),
   frequency: z.string().trim().max(100).default(''),
   duration: z.string().trim().max(100).default(''),
   instructions: z.string().trim().max(500).default(''),
 }).strict();
 
 const prescriptionInputSchema = z.object({
-  medications: z.array(medicationInputSchema).min(1, 'At least one medication is required.'),
-  instructions: z.string().trim().max(2000).default(''),
-}).strict();
+  medications: z.array(medicationInputSchema),
+  instructions: z.string().trim().max(2000).optional(),
+  investigations: z.array(z.string().trim().min(1).max(200)).optional(),
+  ayushAdvice: z.object({
+    pathya: z.string().trim().max(2000).optional(),
+    apathya: z.string().trim().max(2000).optional(),
+  }).strict().optional(),
+  generalAdvice: z.string().trim().max(3000).optional(),
+  followUpDate: z.iso.date().nullable().optional(),
+}).strict().refine(
+  ({ medications, investigations, ayushAdvice, generalAdvice, followUpDate }) =>
+    Boolean(medications.length || investigations?.length || ayushAdvice?.pathya ||
+      ayushAdvice?.apathya || generalAdvice || followUpDate),
+  { message: 'Enter a medication or add treatment-plan details.', path: ['medications'] },
+);
 
 const interactionCheckSchema = z.object({
   medications: z.array(z.union([z.string().trim().min(1), medicationInputSchema])).min(1, 'Provide medications to check.'),

@@ -25,40 +25,55 @@ async function updatePrescription(request, response) {
   const patient = await Patient.findOne({ patientId: request.params.patientId });
   if (!patient) throw new AppError('Patient record not found.', 404);
 
-  const { medications, instructions } = request.validatedBody;
-
-  // Run automated drug-drug and herb-drug interaction checks
+  const input = request.validatedBody;
+  const { medications } = input;
   const warnings = checkDrugInteractions(medications);
-
-  const current = patient.prescription || {};
-  const hasExistingMedications = Array.isArray(current.medications) && current.medications.length > 0;
-
-  // Retain previous version in prescription history
-  if (hasExistingMedications) {
-    if (!Array.isArray(patient.prescription.history)) {
-      patient.prescription.history = [];
-    }
-
-    patient.prescription.history.push({
-      version: current.version || 1,
-      medications: current.medications,
-      instructions: current.instructions || '',
-      warnings: current.warnings || [],
-      prescribedBy: current.prescribedBy || request.user._id,
-      prescribedAt: current.prescribedAt || current.updatedAt || new Date(),
+  const now = new Date();
+  patient.prescription ??= {};
+  const prescription = patient.prescription;
+  const storedVersion = prescription.version;
+  // Prescriptions saved by the original builder have a timestamp and no version.
+  const previousVersion = storedVersion || (prescription.prescribedAt || prescription.medications?.length ? 1 : 0);
+  if (previousVersion) {
+    const { history, updatedAt, ...previous } = prescription.toObject();
+    prescription.history ??= [];
+    prescription.history.push({
+      ...previous,
+      version: previousVersion,
+      prescribedAt: previous.prescribedAt || updatedAt || null,
     });
   }
 
-  const nextVersion = (current.version || 0) + 1;
-  patient.prescription.version = nextVersion;
-  patient.prescription.medications = medications;
-  patient.prescription.instructions = instructions || '';
-  patient.prescription.warnings = warnings;
-  patient.prescription.prescribedBy = request.user._id;
-  patient.prescription.prescribedAt = new Date();
-  patient.prescription.updatedAt = new Date();
+  for (const field of ['instructions', 'investigations', 'generalAdvice']) {
+    if (Object.hasOwn(input, field)) prescription[field] = input[field];
+  }
+  for (const field of ['pathya', 'apathya']) {
+    if (Object.hasOwn(input.ayushAdvice ?? {}, field)) {
+      prescription.set(`ayushAdvice.${field}`, input.ayushAdvice[field]);
+    }
+  }
+  if (Object.hasOwn(input, 'followUpDate')) {
+    prescription.followUpDate = input.followUpDate ? new Date(`${input.followUpDate}T00:00:00.000Z`) : null;
+  }
 
-  await patient.save();
+  const nextVersion = previousVersion + 1;
+  prescription.version = nextVersion;
+  prescription.medications = medications;
+  prescription.warnings = warnings;
+  prescription.prescribedBy = request.user._id;
+  prescription.prescribedAt = now;
+  prescription.updatedAt = now;
+
+  // Match the version we read so concurrent saves cannot append the same revision.
+  patient.$where = { 'prescription.version': storedVersion || { $in: [0, null] } };
+  try {
+    await patient.save();
+  } catch (error) {
+    if (error.name === 'DocumentNotFoundError') {
+      throw new AppError('This prescription changed while you were editing. Reload the patient record before saving again.', 409);
+    }
+    throw error;
+  }
 
   await recordAudit(request, {
     action: 'patient.prescription.update',

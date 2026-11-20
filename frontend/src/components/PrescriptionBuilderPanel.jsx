@@ -18,6 +18,7 @@ export default function PrescriptionBuilderPanel({ patient, onUpdated }) {
   const [saving, setSaving] = useState(false);
 
   const currentRx = patient?.prescription || {};
+  const [warnings, setWarnings] = useState(() => currentRx.warnings || []);
   const [medications, setMedications] = useState(() => currentRx.medications?.length ? currentRx.medications : []);
   const [investigations, setInvestigations] = useState(() => currentRx.investigations?.join(', ') || '');
   const [pathya, setPathya] = useState(() => currentRx.ayushAdvice?.pathya || '');
@@ -51,11 +52,13 @@ export default function PrescriptionBuilderPanel({ patient, onUpdated }) {
     setSaving(true);
 
     try {
-      const validMeds = medications.filter((m) => m.name.trim().length > 0);
+      const medicationItems = medications.map(({ name, dosage, form, frequency, duration, instructions }) => ({
+        name, dosage, form, frequency, duration, instructions,
+      }));
       const invList = investigations.split(',').map((s) => s.trim()).filter(Boolean);
 
       const payload = {
-        medications: validMeds,
+        medications: medicationItems,
         investigations: invList,
         ayushAdvice: {
           pathya: pathya.trim(),
@@ -65,7 +68,8 @@ export default function PrescriptionBuilderPanel({ patient, onUpdated }) {
         followUpDate: followUpDate || null,
       };
 
-      await api.patch(`/patients/${encodeURIComponent(patient.patientId)}/prescription`, payload);
+      const { data } = await api.put(`/patients/${encodeURIComponent(patient.patientId)}/prescription`, payload);
+      setWarnings(data.warnings);
       toast.success('Prescription & treatment plan saved successfully.');
       onUpdated?.();
     } catch (err) {
@@ -156,9 +160,10 @@ export default function PrescriptionBuilderPanel({ patient, onUpdated }) {
                   <td>
                     <select
                       className="rx-cell-select"
-                      value={med.form}
+                      value={med.form ?? ''}
                       onChange={(e) => updateMedication(idx, 'form', e.target.value)}
                     >
+                      <option value="">Not specified</option>
                       <option value="Tablet">Tablet</option>
                       <option value="Capsule">Capsule</option>
                       <option value="Syrup">Syrup</option>
@@ -282,6 +287,22 @@ export default function PrescriptionBuilderPanel({ patient, onUpdated }) {
           </label>
         </div>
       </div>
+
+      {warnings.length > 0 && (
+        <div className="admin-alert error" role="alert">
+          <div>
+            <strong>Interaction warnings on the saved prescription</strong>
+            <ul>
+              {warnings.map((warning) => (
+                <li key={warning.drugs.join('|') + warning.description}>
+                  <b>{warning.severity.toUpperCase()} · {warning.drugs.join(' + ')}</b>
+                  <p>{warning.description} {warning.actionRequired}</p>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      )}
 
       <div className="rx-save-actions">
         <button type="button" className="button button-primary" onClick={handleSave} disabled={saving}>

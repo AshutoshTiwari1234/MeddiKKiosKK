@@ -38,7 +38,7 @@ The first administrator is created through the interactive `npm run create-admin
 - `POST /api/patients/intake/documents` is a multipart upload with `document` and `category` fields. It requires a valid intake token and `consent.documentProcessing: true`, accepts PDF/JPEG/PNG up to 10 MB, and stores the original in a private directory. OCR may report `unavailable` when Tesseract is absent; the original remains available for clinician review.
 - `PATCH /api/patients/intake/case-history` accepts one or more allowlisted patient-reported case-history fields; send the capability in the `X-Intake-Token` header. The token expires after two hours and is revoked when `{ "complete": true }` is saved. Do not log or share this capability token.
 - `PATCH /api/patients/intake/consent` accepts boolean updates for `caseTaking`, `documentProcessing`, and/or `aiAssistance` with the intake capability. Every change is stored as a timestamped consent snapshot. Turning off case-taking revokes the token; turning off optional processing blocks later requests that need that consent.
-- `GET /api/patients?today=true&limit=100` requires an authenticated staff account and returns dashboard queue fields without clinical history or ABHA.
+- `GET /api/patients?today=true&limit=100` requires an authenticated staff account and returns dashboard queue fields without clinical history or ABHA. Doctors and administrators can opt in with `includeSeverity=true` to receive `reportedSeverity` (the patient-reported 0–10 score, or `null` if absent) on each row.
 - `POST /api/patients/search` accepts `{ "q", "page", "limit" }` in the JSON body and requires an authenticated staff account. It returns paginated results without clinical history or ABHA, keeping search terms out of request URLs.
 - `GET /api/patients/:patientId` requires an authenticated staff account. Doctors and administrators receive case history and ABHA; receptionists receive registration details only.
 - `PATCH /api/patients/:patientId/vitals` accepts blood pressure, pulse, SpO₂, temperature, weight and height. Each save updates the current vitals and appends a timestamped reading to `vitalsHistory` (the most recent 100 readings are kept).
@@ -50,6 +50,12 @@ The first administrator is created through the interactive `npm run create-admin
 - `POST /api/patients/:patientId/summary/generate` assembles a draft from patient responses, verified history, Ayurveda assessment, and only clinician-reviewed document text. If the patient gave AI-assistance consent and an optional provider is configured, the provider may create the draft. Otherwise it is assembled deterministically.
 - `PATCH /api/patients/:patientId/summary` accepts `{ "text", "status": "draft" | "approved" }`; approval requires completed intake. Previous summary versions are retained.
 - `GET /api/patients/:patientId/fhir-r4` is restricted to doctors and administrators. It returns a downloadable FHIR R4 `Bundle` of type `collection` containing a `Patient` and a `DocumentReference` for the approved clinical summary. Intake must be complete and the summary approved. The response is audit logged and is not sent to an external server.
+
+## Prescriptions and treatment plans
+
+- `GET /api/patients/:patientId/prescription` and `GET /api/patients/:patientId/prescription/history` return the current prescription and its saved versions to doctors and administrators.
+- `PUT /api/patients/:patientId/prescription` replaces the medication list and accepts optional `instructions`, `investigations`, `ayushAdvice`, `generalAdvice`, and `followUpDate` (a `YYYY-MM-DD` date or `null`). Medication rows can include `form`. Omitted optional treatment-plan fields retain their saved values. An empty medication list requires submitted treatment-plan details.
+- Each successful save snapshots the previous version, including its treatment plan and interaction warnings, and returns the updated prescription with recalculated warnings. A competing save can return `409` if another request saved the same version first.
 
 ## OPD analytics
 
@@ -70,6 +76,13 @@ A clinic session is one doctor's OPD shift in one cabin on one day. Times are lo
 - `PATCH /api/sessions/:sessionId` (administrator or the assigned doctor) changes date, shift, times, cabin, department, slot length, capacity or notes. Completed and cancelled sessions cannot be edited.
 - `PATCH /api/sessions/:sessionId/status` accepts `{ "status": "active" | "completed" | "cancelled", "reason"? }`. Allowed changes: scheduled → active or cancelled, active → completed or cancelled.
 - Creating or moving a session returns `409` if the doctor already has an overlapping session, or if the cabin is already allocated at that time (cabin names are compared ignoring case and extra spaces). Back-to-back sessions are allowed, and cancelled sessions free their slot.
+
+## Hospital department directory
+
+- `GET /api/departments/directory?date=YYYY-MM-DD` is read-only and available to authenticated administrators, doctors, and receptionists. It defaults to today in server-local time. Invalid dates return `400`.
+- The response contains `{ date, departments }`. Each department has `{ department, doctors }`. Each doctor has `{ doctorId, name, available, sessions }`. Sessions provide `{ _id, shift, startTime, endTime, cabin, status }` with the same 24-hour times and cabin labels as the Clinic Session API.
+- The directory includes departments from active, approved doctor rosters and their non-cancelled sessions on the selected day. A session appears under its own department, including when it differs from the doctor's roster department. A doctor with no session in a roster department has `available: false` and `sessions: []`. Registration-only labels are omitted.
+- A `scheduled` or `active` session makes the doctor available on the selected day in that department. A `completed` session is visible and does not count toward availability. Use `GET /api/appointments/availability` for individual slots.
 
 ## Follow-up appointments
 
@@ -96,6 +109,12 @@ Unique database indexes on booked appointments (doctor + start time, patient + s
 - `PATCH /api/alerts/:alertId` accepts `{ "status": "acknowledged" | "resolved" }`. A staff member must acknowledge an alert before resolving it. Alerts retain the patient link and timestamps, not the triggering answer text.
 
 Every patient list/detail read and kiosk write is audit logged. The list response includes a clinical review status but no clinical history. Patient responses remain unverified until a clinician reviews them. These endpoints do not produce diagnoses or treatment recommendations.
+
+## Kiosk feedback
+
+- `POST /api/feedback` accepts only `{ "rating": 1 }`, where the rating is an integer from 1 to 5. It accepts anonymous survey responses independently of intake status and does not use session credentials or patient identifiers. Requests are limited to 30 per 15 minutes per client IP.
+- The kiosk sends a random `Idempotency-Key` header (32 lowercase hexadecimal characters) for the life of the token slip. The first submission returns `201`. Repeating that key returns `200` and preserves the first accepted rating, even if requests overlap. Other clients may omit the header, in which case each accepted request creates a response.
+- `GET /api/feedback/average` requires the `administrator` role and returns `{ "averageRating": 4.25, "count": 4 }` across all responses. An empty survey returns `{ "averageRating": null, "count": 0 }`.
 
 ## AI service
 

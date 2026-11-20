@@ -1,0 +1,51 @@
+.queue-quick-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+  margin: 12px 0;
+}
+
+.queue-quick-filters label {
+  display: grid;
+  min-width: 0;
+  max-width: min(100%, 15rem);
+  gap: 4px;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.queue-quick-filters select {
+  min-width: 0;
+  min-height: 38px;
+  padding: 0 10px;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  background: var(--bg-surface);
+  color: var(--text-main);
+  font-size: 13px;
+  font-weight: 400;
+}
+
+.queue-quick-filters select:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: 2px;
+}
+
+.dark .queue-quick-filters label {
+  color: #cbd5e1;
+}
+
+.dark .queue-quick-filters select {
+  color-scheme: dark;
+  background: #1e293b;
+  border-color: #334155;
+  color: #f1f5f9;
+}
+
+@media (max-width: 600px) {
+  .queue-quick-filters {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
